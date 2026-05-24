@@ -137,6 +137,31 @@ export async function getTransactionsSummary(userId: number) {
   return { totalIncome, totalExpense };
 }
 
+/** Income vs expense totals grouped by month (YYYY-MM), most recent `months`. */
+export async function getMonthlyCashFlow(userId: number, months = 6) {
+  const rows = await getDb().select({
+    month: sql<string>`substr(${transactions.transactionDate}, 1, 7)`,
+    type: transactions.type,
+    total: sql<number>`SUM(CAST(${transactions.amount} AS REAL))`,
+  }).from(transactions)
+    .where(eq(transactions.userId, userId))
+    .groupBy(sql`substr(${transactions.transactionDate}, 1, 7)`, transactions.type);
+
+  const byMonth = new Map<string, { income: number; expense: number }>();
+  for (const row of rows) {
+    if (!row.month) continue;
+    const entry = byMonth.get(row.month) ?? { income: 0, expense: 0 };
+    if (row.type === "income") entry.income = Number(row.total ?? 0);
+    if (row.type === "expense") entry.expense = Number(row.total ?? 0);
+    byMonth.set(row.month, entry);
+  }
+
+  return Array.from(byMonth.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-months)
+    .map(([month, v]) => ({ month, income: v.income, expense: v.expense, net: v.income - v.expense }));
+}
+
 // ============ DOCUMENTS ============
 
 export async function getDocuments(userId: number, search?: string, category?: string) {

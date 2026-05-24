@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 const timestamps = {
   createdAt: integer("createdAt", { mode: "timestamp" })
@@ -47,7 +47,7 @@ export const bankAccounts = sqliteTable("bank_accounts", {
   color: text("color"),
   isActive: integer("isActive").notNull().default(1),
   ...timestamps,
-});
+}, (t) => [index("bank_accounts_userId_idx").on(t.userId)]);
 
 export type BankAccount = typeof bankAccounts.$inferSelect;
 export type InsertBankAccount = typeof bankAccounts.$inferInsert;
@@ -68,7 +68,7 @@ export const cards = sqliteTable("cards", {
   bankAccountId: integer("bankAccountId"),
   isActive: integer("isActive").notNull().default(1),
   ...timestamps,
-});
+}, (t) => [index("cards_userId_idx").on(t.userId)]);
 
 export type Card = typeof cards.$inferSelect;
 export type InsertCard = typeof cards.$inferInsert;
@@ -91,7 +91,7 @@ export const transactions = sqliteTable("transactions", {
   isRecurring: integer("isRecurring").notNull().default(0),
   notes: text("notes"),
   ...timestamps,
-});
+}, (t) => [index("transactions_userId_date_idx").on(t.userId, t.transactionDate)]);
 
 export type Transaction = typeof transactions.$inferSelect;
 export type InsertTransaction = typeof transactions.$inferInsert;
@@ -118,7 +118,10 @@ export const documents = sqliteTable("documents", {
   tags: text("tags"),
   expiresAt: text("expiresAt"),
   ...timestamps,
-});
+}, (t) => [
+  index("documents_userId_idx").on(t.userId),
+  index("documents_userId_fileKey_idx").on(t.userId, t.fileKey),
+]);
 
 export type Document = typeof documents.$inferSelect;
 export type InsertDocument = typeof documents.$inferInsert;
@@ -139,7 +142,7 @@ export const assets = sqliteTable("assets", {
   status: text("status", { enum: ["active", "sold", "inactive"] }).notNull().default("active"),
   notes: text("notes"),
   ...timestamps,
-});
+}, (t) => [index("assets_userId_idx").on(t.userId)]);
 
 export type Asset = typeof assets.$inferSelect;
 export type InsertAsset = typeof assets.$inferInsert;
@@ -162,7 +165,7 @@ export const legalCases = sqliteTable("legal_cases", {
   description: text("description"),
   notes: text("notes"),
   ...timestamps,
-});
+}, (t) => [index("legal_cases_userId_idx").on(t.userId)]);
 
 export type LegalCase = typeof legalCases.$inferSelect;
 export type InsertLegalCase = typeof legalCases.$inferInsert;

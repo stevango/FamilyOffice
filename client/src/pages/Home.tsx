@@ -2,6 +2,7 @@ import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { CashFlowChart } from "@/components/CashFlowChart";
 import {
   Wallet,
   Building2,
@@ -12,6 +13,19 @@ import {
   AlertCircle,
   Calendar,
 } from "lucide-react";
+
+const categoryLabels: Record<string, string> = {
+  personal: "Pessoal",
+  property: "Imóvel",
+  vehicle: "Veículo",
+  company: "Empresa",
+  legal: "Jurídico",
+  tax: "Fiscal",
+  insurance: "Seguro",
+  contract: "Contrato",
+  certificate: "Certidão",
+  other: "Outro",
+};
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("pt-BR", {
@@ -117,6 +131,9 @@ export default function Home() {
         </Card>
       </div>
 
+      {/* Cash flow */}
+      <CashFlowChart />
+
       {/* Secondary Info */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Recent Documents */}
@@ -138,7 +155,7 @@ export default function Home() {
                       </div>
                     </div>
                     <Badge variant="secondary" className="text-xs shrink-0">
-                      {doc.category}
+                      {categoryLabels[doc.category] ?? doc.category}
                     </Badge>
                   </div>
                 ))}
