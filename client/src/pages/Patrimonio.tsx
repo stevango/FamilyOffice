@@ -208,7 +208,7 @@ export default function Patrimonio() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Nome</Label>
-                  <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex: Apartamento Centro" />
+                  <Input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex: Apartamento Centro" />
                 </div>
                 <div className="space-y-2">
                   <Label>Tipo</Label>
@@ -227,7 +227,7 @@ export default function Patrimonio() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Valor Estimado (R$)</Label>
-                  <Input type="number" step="0.01" value={form.estimatedValue} onChange={(e) => setForm({ ...form, estimatedValue: e.target.value })} placeholder="0,00" />
+                  <Input type="number" step="0.01" min="0" inputMode="decimal" required value={form.estimatedValue} onChange={(e) => setForm({ ...form, estimatedValue: e.target.value })} placeholder="0,00" />
                 </div>
                 <div className="space-y-2">
                   <Label>Valor Aquisição (R$)</Label>

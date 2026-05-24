@@ -218,12 +218,12 @@ function TransactionsTab() {
               </div>
               <div className="space-y-2">
                 <Label>Descrição</Label>
-                <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Ex: Aluguel, Salário..." />
+                <Input required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Ex: Aluguel, Salário..." />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Valor (R$)</Label>
-                  <Input type="number" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="0,00" />
+                  <Input type="number" step="0.01" min="0" inputMode="decimal" required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="0,00" />
                 </div>
                 <div className="space-y-2">
                   <Label>Categoria</Label>

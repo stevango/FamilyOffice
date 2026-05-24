@@ -14,6 +14,8 @@ export function useAuth() {
     onSuccess: () => {
       utils.auth.me.setData(undefined, null);
     },
+    // Logout failures are handled locally; suppress the global error toast.
+    onError: () => {},
   });
 
   const logout = useCallback(async () => {
