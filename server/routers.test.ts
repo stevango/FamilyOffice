@@ -1,56 +1,41 @@
 import { describe, expect, it } from "vitest";
-import { appRouter } from "./routers";
 import { COOKIE_NAME } from "../shared/const";
+import type { User } from "../drizzle/schema";
 import type { TrpcContext } from "./_core/context";
+import { appRouter } from "./routers";
 
-type CookieCall = {
-  name: string;
-  options: Record<string, unknown>;
+type CookieCall = { name: string; options: Record<string, unknown> };
+
+const sampleUser: User = {
+  id: 1,
+  email: "test@example.com",
+  name: "Test User",
+  passwordHash: "secret-hash",
+  role: "user",
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  lastSignedIn: new Date(),
 };
-
-type AuthenticatedUser = NonNullable<TrpcContext["user"]>;
 
 function createAuthContext(): { ctx: TrpcContext; clearedCookies: CookieCall[] } {
   const clearedCookies: CookieCall[] = [];
-
-  const user: AuthenticatedUser = {
-    id: 1,
-    openId: "test-user-123",
-    email: "test@example.com",
-    name: "Test User",
-    loginMethod: "manus",
-    role: "user",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    lastSignedIn: new Date(),
-  };
-
   const ctx: TrpcContext = {
-    user,
-    req: {
-      protocol: "https",
-      headers: {},
-    } as TrpcContext["req"],
+    user: { ...sampleUser },
+    req: { protocol: "https", headers: {} } as TrpcContext["req"],
     res: {
       clearCookie: (name: string, options: Record<string, unknown>) => {
         clearedCookies.push({ name, options });
       },
-    } as TrpcContext["res"],
+    } as unknown as TrpcContext["res"],
   };
-
   return { ctx, clearedCookies };
 }
 
 function createUnauthContext(): TrpcContext {
   return {
     user: null,
-    req: {
-      protocol: "https",
-      headers: {},
-    } as TrpcContext["req"],
-    res: {
-      clearCookie: () => {},
-    } as TrpcContext["res"],
+    req: { protocol: "https", headers: {} } as TrpcContext["req"],
+    res: { clearCookie: () => {} } as unknown as TrpcContext["res"],
   };
 }
 
@@ -68,65 +53,30 @@ describe("auth.logout", () => {
 });
 
 describe("auth.me", () => {
-  it("returns user when authenticated", async () => {
+  it("returns the public user (without password hash) when authenticated", async () => {
     const { ctx } = createAuthContext();
     const caller = appRouter.createCaller(ctx);
 
     const result = await caller.auth.me();
     expect(result).toBeDefined();
-    expect(result?.openId).toBe("test-user-123");
+    expect(result?.email).toBe("test@example.com");
     expect(result?.name).toBe("Test User");
+    expect((result as Record<string, unknown>)?.passwordHash).toBeUndefined();
   });
 
   it("returns null when unauthenticated", async () => {
-    const ctx = createUnauthContext();
-    const caller = appRouter.createCaller(ctx);
-
-    const result = await caller.auth.me();
-    expect(result).toBeNull();
+    const caller = appRouter.createCaller(createUnauthContext());
+    expect(await caller.auth.me()).toBeNull();
   });
 });
 
 describe("protected procedures require auth", () => {
-  it("dashboard.summary throws when unauthenticated", async () => {
-    const ctx = createUnauthContext();
-    const caller = appRouter.createCaller(ctx);
-
-    await expect(caller.dashboard.summary()).rejects.toThrow();
-  });
-
-  it("bankAccounts.list throws when unauthenticated", async () => {
-    const ctx = createUnauthContext();
-    const caller = appRouter.createCaller(ctx);
-
-    await expect(caller.bankAccounts.list()).rejects.toThrow();
-  });
-
-  it("transactions.list throws when unauthenticated", async () => {
-    const ctx = createUnauthContext();
-    const caller = appRouter.createCaller(ctx);
-
-    await expect(caller.transactions.list()).rejects.toThrow();
-  });
-
-  it("documents.list throws when unauthenticated", async () => {
-    const ctx = createUnauthContext();
-    const caller = appRouter.createCaller(ctx);
-
-    await expect(caller.documents.list()).rejects.toThrow();
-  });
-
-  it("assets.list throws when unauthenticated", async () => {
-    const ctx = createUnauthContext();
-    const caller = appRouter.createCaller(ctx);
-
-    await expect(caller.assets.list()).rejects.toThrow();
-  });
-
-  it("legalCases.list throws when unauthenticated", async () => {
-    const ctx = createUnauthContext();
-    const caller = appRouter.createCaller(ctx);
-
-    await expect(caller.legalCases.list()).rejects.toThrow();
-  });
+  const cases = ["dashboard", "bankAccounts", "transactions", "documents", "assets", "legalCases"] as const;
+  for (const ns of cases) {
+    it(`${ns}.list throws when unauthenticated`, async () => {
+      const caller = appRouter.createCaller(createUnauthContext());
+      const proc = ns === "dashboard" ? caller.dashboard.summary() : (caller as any)[ns].list();
+      await expect(proc).rejects.toThrow();
+    });
+  }
 });

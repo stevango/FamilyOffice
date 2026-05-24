@@ -1,30 +1,39 @@
+import { Route, Switch } from "wouter";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useAuth } from "@/_core/hooks/useAuth";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
-import { ThemeProvider } from "./contexts/ThemeContext";
 import DashboardLayout from "./components/DashboardLayout";
-import Home from "./pages/Home";
-import Financeiro from "./pages/Financeiro";
+import { DashboardLayoutSkeleton } from "./components/DashboardLayoutSkeleton";
+import { ThemeProvider } from "./contexts/ThemeContext";
 import Documentos from "./pages/Documentos";
-import Patrimonio from "./pages/Patrimonio";
+import Financeiro from "./pages/Financeiro";
+import Home from "./pages/Home";
 import Juridico from "./pages/Juridico";
+import Login from "./pages/Login";
+import Patrimonio from "./pages/Patrimonio";
 
-function Router() {
+function AuthenticatedApp() {
   return (
     <DashboardLayout>
       <Switch>
-        <Route path={"/"} component={Home} />
-        <Route path={"/financeiro"} component={Financeiro} />
-        <Route path={"/documentos"} component={Documentos} />
-        <Route path={"/patrimonio"} component={Patrimonio} />
-        <Route path={"/juridico"} component={Juridico} />
-        <Route path={"/404"} component={NotFound} />
+        <Route path="/" component={Home} />
+        <Route path="/financeiro" component={Financeiro} />
+        <Route path="/documentos" component={Documentos} />
+        <Route path="/patrimonio" component={Patrimonio} />
+        <Route path="/juridico" component={Juridico} />
         <Route component={NotFound} />
       </Switch>
     </DashboardLayout>
   );
+}
+
+function Gate() {
+  const { user, loading } = useAuth();
+  if (loading) return <DashboardLayoutSkeleton />;
+  if (!user) return <Login />;
+  return <AuthenticatedApp />;
 }
 
 function App() {
@@ -33,7 +42,7 @@ function App() {
       <ThemeProvider defaultTheme="dark">
         <TooltipProvider>
           <Toaster />
-          <Router />
+          <Gate />
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>
