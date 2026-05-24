@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { CashFlowChart } from "@/components/CashFlowChart";
+import { AlertsPanel } from "@/components/AlertsPanel";
 import {
   Wallet,
   Building2,
@@ -77,6 +78,8 @@ export default function Home() {
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground text-sm mt-1">Visão executiva consolidada</p>
       </div>
+
+      <AlertsPanel />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

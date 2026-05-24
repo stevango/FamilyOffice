@@ -259,6 +259,54 @@ export async function deleteLegalCase(id: number, userId: number) {
   await getDb().delete(legalCases).where(and(eq(legalCases.id, id), eq(legalCases.userId, userId)));
 }
 
+// ============ ALERTS ============
+
+export type AlertItem = {
+  kind: "document" | "legal";
+  id: number;
+  title: string;
+  date: string;
+  daysUntil: number;
+  overdue: boolean;
+};
+
+/** Documents expiring and legal deadlines within `horizonDays` (plus overdue). */
+export async function getAlerts(userId: number, horizonDays = 30): Promise<AlertItem[]> {
+  const db = getDb();
+  const today = new Date();
+  const todayStr = today.toISOString().slice(0, 10);
+  const horizon = new Date(today.getTime() + horizonDays * 86_400_000).toISOString().slice(0, 10);
+
+  const daysBetween = (date: string) =>
+    Math.round((new Date(`${date}T00:00:00`).getTime() - new Date(`${todayStr}T00:00:00`).getTime()) / 86_400_000);
+
+  const docs = await db.select({ id: documents.id, title: documents.title, date: documents.expiresAt })
+    .from(documents)
+    .where(and(
+      eq(documents.userId, userId),
+      sql`${documents.expiresAt} IS NOT NULL AND ${documents.expiresAt} <= ${horizon}`
+    ))
+    .orderBy(documents.expiresAt)
+    .limit(25);
+
+  const cases = await db.select({ id: legalCases.id, title: legalCases.title, date: legalCases.nextDeadline })
+    .from(legalCases)
+    .where(and(
+      eq(legalCases.userId, userId),
+      eq(legalCases.status, "active"),
+      sql`${legalCases.nextDeadline} IS NOT NULL AND ${legalCases.nextDeadline} <= ${horizon}`
+    ))
+    .orderBy(legalCases.nextDeadline)
+    .limit(25);
+
+  const items: AlertItem[] = [
+    ...docs.map((d) => ({ kind: "document" as const, id: d.id, title: d.title, date: d.date!, daysUntil: daysBetween(d.date!), overdue: d.date! < todayStr })),
+    ...cases.map((c) => ({ kind: "legal" as const, id: c.id, title: c.title, date: c.date!, daysUntil: daysBetween(c.date!), overdue: c.date! < todayStr })),
+  ];
+
+  return items.sort((a, b) => a.date.localeCompare(b.date));
+}
+
 // ============ DASHBOARD SUMMARY ============
 
 export async function getDashboardSummary(userId: number) {

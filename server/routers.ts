@@ -194,6 +194,11 @@ export const appRouter = router({
       .query(async ({ ctx, input }) => {
         return db.getMonthlyCashFlow(ctx.user.id, input?.months ?? 6);
       }),
+    alerts: protectedProcedure
+      .input(z.object({ horizonDays: z.number().min(1).max(365).default(30) }).optional())
+      .query(async ({ ctx, input }) => {
+        return db.getAlerts(ctx.user.id, input?.horizonDays ?? 30);
+      }),
   }),
 
   // ============ BANK ACCOUNTS ============
