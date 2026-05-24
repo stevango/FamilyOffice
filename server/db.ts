@@ -1,15 +1,14 @@
-import Database from "better-sqlite3";
 import { and, desc, eq, inArray, like, or, sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
-import { mkdirSync } from "node:fs";
+import { drizzle, type MySql2Database } from "drizzle-orm/mysql2";
+import { migrate } from "drizzle-orm/mysql2/migrator";
+import mysql from "mysql2/promise";
 import path from "node:path";
 import {
   assets, InsertAsset,
   bankAccounts, InsertBankAccount,
   cards, InsertCard,
   documents, InsertDocument,
-  households, InsertHousehold,
+  households,
   invites, InsertInvite,
   legalCases, InsertLegalCase,
   transactions, InsertTransaction,
@@ -17,33 +16,23 @@ import {
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
-let _db: ReturnType<typeof drizzle> | null = null;
+let _db: MySql2Database | null = null;
+let _pool: mysql.Pool | null = null;
 
-export function getDb() {
+export function getDb(): MySql2Database {
   if (!_db) {
-    mkdirSync(path.dirname(ENV.databaseFile), { recursive: true });
-    const sqlite = new Database(ENV.databaseFile);
-    sqlite.pragma("journal_mode = WAL");
-    sqlite.pragma("foreign_keys = ON");
-    _db = drizzle(sqlite);
-    migrate(_db, { migrationsFolder: path.resolve(process.cwd(), "drizzle/migrations") });
-
-    // Backfill: any user without a household (legacy single-user data) gets
-    // their own household and the admin role. Idempotent on every boot.
-    const legacy = sqlite.prepare("SELECT id, name FROM users WHERE householdId IS NULL").all() as { id: number; name: string | null }[];
-    if (legacy.length > 0) {
-      const now = Math.floor(Date.now() / 1000);
-      const insertH = sqlite.prepare("INSERT INTO households (name, createdAt, updatedAt) VALUES (?, ?, ?)");
-      const assign = sqlite.prepare("UPDATE users SET householdId = ?, role = 'admin' WHERE id = ?");
-      sqlite.transaction(() => {
-        for (const u of legacy) {
-          const r = insertH.run(u.name ? `Família ${u.name}` : "Minha Família", now, now);
-          assign.run(r.lastInsertRowid, u.id);
-        }
-      })();
+    if (!ENV.databaseUrl) {
+      throw new Error("DATABASE_URL is not set");
     }
+    _pool = mysql.createPool(ENV.databaseUrl);
+    _db = drizzle(_pool);
   }
   return _db;
+}
+
+/** Apply pending migrations. Call once at server startup. */
+export async function migrateDb(): Promise<void> {
+  await migrate(getDb(), { migrationsFolder: path.resolve(process.cwd(), "drizzle/migrations") });
 }
 
 /** Subquery of the user ids belonging to a household — used to scope all data. */
@@ -54,8 +43,8 @@ function memberIds(householdId: number) {
 // ============ HOUSEHOLDS ============
 
 export async function createHousehold(name: string) {
-  const [row] = await getDb().insert(households).values({ name }).returning({ id: households.id });
-  return row.id;
+  const result = await getDb().insert(households).values({ name });
+  return result[0].insertId;
 }
 
 export async function getHousehold(id: number) {
@@ -81,12 +70,12 @@ export async function getUserByEmail(email: string) {
 
 export async function countUsers(): Promise<number> {
   const [row] = await getDb().select({ count: sql<number>`COUNT(*)` }).from(users);
-  return row?.count ?? 0;
+  return Number(row?.count ?? 0);
 }
 
 export async function createUser(data: InsertUser) {
-  const [row] = await getDb().insert(users).values(data).returning({ id: users.id });
-  return getUserById(row.id);
+  const result = await getDb().insert(users).values(data);
+  return getUserById(result[0].insertId);
 }
 
 export async function getHouseholdMembers(householdId: number) {
@@ -100,7 +89,7 @@ export async function getHouseholdMembers(householdId: number) {
 export async function countAdmins(householdId: number): Promise<number> {
   const [row] = await getDb().select({ count: sql<number>`COUNT(*)` }).from(users)
     .where(and(eq(users.householdId, householdId), eq(users.role, "admin")));
-  return row?.count ?? 0;
+  return Number(row?.count ?? 0);
 }
 
 export async function updateUserRole(id: number, householdId: number, role: Role) {
@@ -122,8 +111,8 @@ export async function updateUserPassword(id: number, passwordHash: string) {
 // ============ INVITES ============
 
 export async function createInvite(data: InsertInvite) {
-  const [row] = await getDb().insert(invites).values(data).returning({ id: invites.id });
-  return row.id;
+  const result = await getDb().insert(invites).values(data);
+  return result[0].insertId;
 }
 
 export async function getValidInvite(code: string) {
@@ -156,8 +145,8 @@ export async function getBankAccounts(householdId: number) {
 }
 
 export async function createBankAccount(data: InsertBankAccount) {
-  const [row] = await getDb().insert(bankAccounts).values(data).returning({ id: bankAccounts.id });
-  return { id: row.id };
+  const result = await getDb().insert(bankAccounts).values(data);
+  return { id: result[0].insertId };
 }
 
 export async function updateBankAccount(id: number, householdId: number, data: Partial<InsertBankAccount>) {
@@ -175,8 +164,8 @@ export async function getCards(householdId: number) {
 }
 
 export async function createCard(data: InsertCard) {
-  const [row] = await getDb().insert(cards).values(data).returning({ id: cards.id });
-  return { id: row.id };
+  const result = await getDb().insert(cards).values(data);
+  return { id: result[0].insertId };
 }
 
 export async function updateCard(id: number, householdId: number, data: Partial<InsertCard>) {
@@ -198,8 +187,8 @@ export async function getTransactions(householdId: number, limit = 50, offset = 
 }
 
 export async function createTransaction(data: InsertTransaction) {
-  const [row] = await getDb().insert(transactions).values(data).returning({ id: transactions.id });
-  return { id: row.id };
+  const result = await getDb().insert(transactions).values(data);
+  return { id: result[0].insertId };
 }
 
 export async function createTransactions(rows: InsertTransaction[]) {
@@ -219,7 +208,7 @@ export async function deleteTransaction(id: number, householdId: number) {
 export async function getTransactionsSummary(householdId: number) {
   const result = await getDb().select({
     type: transactions.type,
-    total: sql<number>`SUM(CAST(${transactions.amount} AS REAL))`,
+    total: sql<string>`SUM(${transactions.amount})`,
   }).from(transactions)
     .where(inArray(transactions.userId, memberIds(householdId)))
     .groupBy(transactions.type);
@@ -227,8 +216,8 @@ export async function getTransactionsSummary(householdId: number) {
   let totalIncome = 0;
   let totalExpense = 0;
   for (const row of result) {
-    if (row.type === "income") totalIncome = Number(row.total ?? 0);
-    if (row.type === "expense") totalExpense = Number(row.total ?? 0);
+    if (row.type === "income") totalIncome = parseFloat(row.total || "0");
+    if (row.type === "expense") totalExpense = parseFloat(row.total || "0");
   }
   return { totalIncome, totalExpense };
 }
@@ -236,19 +225,19 @@ export async function getTransactionsSummary(householdId: number) {
 /** Income vs expense totals grouped by month (YYYY-MM), most recent `months`. */
 export async function getMonthlyCashFlow(householdId: number, months = 6) {
   const rows = await getDb().select({
-    month: sql<string>`substr(${transactions.transactionDate}, 1, 7)`,
+    month: sql<string>`DATE_FORMAT(${transactions.transactionDate}, '%Y-%m')`,
     type: transactions.type,
-    total: sql<number>`SUM(CAST(${transactions.amount} AS REAL))`,
+    total: sql<string>`SUM(${transactions.amount})`,
   }).from(transactions)
     .where(inArray(transactions.userId, memberIds(householdId)))
-    .groupBy(sql`substr(${transactions.transactionDate}, 1, 7)`, transactions.type);
+    .groupBy(sql`DATE_FORMAT(${transactions.transactionDate}, '%Y-%m')`, transactions.type);
 
   const byMonth = new Map<string, { income: number; expense: number }>();
   for (const row of rows) {
     if (!row.month) continue;
     const entry = byMonth.get(row.month) ?? { income: 0, expense: 0 };
-    if (row.type === "income") entry.income = Number(row.total ?? 0);
-    if (row.type === "expense") entry.expense = Number(row.total ?? 0);
+    if (row.type === "income") entry.income = parseFloat(row.total || "0");
+    if (row.type === "expense") entry.expense = parseFloat(row.total || "0");
     byMonth.set(row.month, entry);
   }
 
@@ -284,8 +273,8 @@ export async function getDocumentByKey(householdId: number, fileKey: string) {
 }
 
 export async function createDocument(data: InsertDocument) {
-  const [row] = await getDb().insert(documents).values(data).returning({ id: documents.id });
-  return { id: row.id };
+  const result = await getDb().insert(documents).values(data);
+  return { id: result[0].insertId };
 }
 
 export async function updateDocument(id: number, householdId: number, data: Partial<InsertDocument>) {
@@ -311,8 +300,8 @@ export async function getAssets(householdId: number, assetType?: string) {
 }
 
 export async function createAsset(data: InsertAsset) {
-  const [row] = await getDb().insert(assets).values(data).returning({ id: assets.id });
-  return { id: row.id };
+  const result = await getDb().insert(assets).values(data);
+  return { id: result[0].insertId };
 }
 
 export async function updateAsset(id: number, householdId: number, data: Partial<InsertAsset>) {
@@ -325,14 +314,14 @@ export async function deleteAsset(id: number, householdId: number) {
 
 export async function getAssetsSummary(householdId: number) {
   const [result] = await getDb().select({
-    totalValue: sql<number>`SUM(CAST(${assets.estimatedValue} AS REAL))`,
+    totalValue: sql<string>`SUM(${assets.estimatedValue})`,
     count: sql<number>`COUNT(*)`,
   }).from(assets)
     .where(and(inArray(assets.userId, memberIds(householdId)), eq(assets.status, "active")));
 
   return {
-    totalValue: Number(result?.totalValue ?? 0),
-    count: result?.count ?? 0,
+    totalValue: parseFloat(result?.totalValue || "0"),
+    count: Number(result?.count ?? 0),
   };
 }
 
@@ -343,8 +332,8 @@ export async function getLegalCases(householdId: number) {
 }
 
 export async function createLegalCase(data: InsertLegalCase) {
-  const [row] = await getDb().insert(legalCases).values(data).returning({ id: legalCases.id });
-  return { id: row.id };
+  const result = await getDb().insert(legalCases).values(data);
+  return { id: result[0].insertId };
 }
 
 export async function updateLegalCase(id: number, householdId: number, data: Partial<InsertLegalCase>) {
@@ -410,11 +399,11 @@ export async function getDashboardSummary(householdId: number) {
   const scope = memberIds(householdId);
 
   const [balanceResult] = await db.select({
-    total: sql<number>`SUM(CAST(${bankAccounts.balance} AS REAL))`,
+    total: sql<string>`SUM(${bankAccounts.balance})`,
   }).from(bankAccounts).where(and(inArray(bankAccounts.userId, scope), eq(bankAccounts.isActive, 1)));
 
   const [assetsResult] = await db.select({
-    total: sql<number>`SUM(CAST(${assets.estimatedValue} AS REAL))`,
+    total: sql<string>`SUM(${assets.estimatedValue})`,
   }).from(assets).where(and(inArray(assets.userId, scope), eq(assets.status, "active")));
 
   const recentDocuments = await db.select().from(documents)
@@ -436,10 +425,10 @@ export async function getDashboardSummary(householdId: number) {
     .limit(5);
 
   return {
-    totalBalance: Number(balanceResult?.total ?? 0),
-    totalAssets: Number(assetsResult?.total ?? 0),
+    totalBalance: parseFloat(balanceResult?.total || "0"),
+    totalAssets: parseFloat(assetsResult?.total || "0"),
     recentDocuments,
-    activeCases: casesResult?.count ?? 0,
+    activeCases: Number(casesResult?.count ?? 0),
     upcomingDeadlines,
   };
 }

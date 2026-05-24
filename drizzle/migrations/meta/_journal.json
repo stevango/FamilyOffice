@@ -1,26 +1,12 @@
 {
   "version": "7",
-  "dialect": "sqlite",
+  "dialect": "mysql",
   "entries": [
     {
       "idx": 0,
-      "version": "6",
-      "when": 1779649358952,
-      "tag": "0000_cuddly_zarek",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1779649915881,
-      "tag": "0001_left_matthew_murdock",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "6",
-      "when": 1779651215843,
-      "tag": "0002_dashing_surge",
+      "version": "5",
+      "when": 1779653260843,
+      "tag": "0000_large_mattie_franklin",
       "breakpoints": true
     }
   ]

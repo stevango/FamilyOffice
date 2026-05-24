@@ -1,18 +1,19 @@
-import { mkdtempSync } from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { TrpcContext } from "./_core/context";
 
-// Point the DB at a throwaway file before importing modules that read ENV.
+// These integration tests need a real MySQL. They run only when DATABASE_URL
+// is set (e.g. in CI with a MySQL service), and are skipped otherwise.
+const hasDb = Boolean(process.env.DATABASE_URL);
+
 let appRouter: typeof import("./routers").appRouter;
 let db: typeof import("./db");
 
 beforeAll(async () => {
-  process.env.DATABASE_FILE = path.join(mkdtempSync(path.join(os.tmpdir(), "fo-")), "test.db");
+  if (!hasDb) return;
   process.env.JWT_SECRET = "test-secret";
   ({ appRouter } = await import("./routers"));
   db = await import("./db");
+  await db.migrateDb();
 });
 
 function ctxFor(user: any): TrpcContext {
@@ -23,7 +24,7 @@ function ctxFor(user: any): TrpcContext {
   };
 }
 
-describe("shared household", () => {
+describe.skipIf(!hasDb)("shared household", () => {
   it("scopes data to the household and enforces roles", async () => {
     const householdId = await db.createHousehold("Família Teste");
     const admin = await db.createUser({ email: "a@t.com", name: "Admin", passwordHash: "x", role: "admin", householdId });

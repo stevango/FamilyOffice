@@ -16,23 +16,24 @@ Módulos:
 
 - **Front-end:** React 19, Vite 7, Tailwind 4, shadcn/ui, TanStack Query, wouter.
 - **Back-end:** Express 4 + tRPC 11 (contratos tipados ponta a ponta), superjson.
-- **Banco:** SQLite via Drizzle ORM — um único arquivo, sem servidor de banco.
+- **Banco:** MySQL via Drizzle ORM. As migrações são aplicadas automaticamente no boot.
 - **Auth:** e-mail + senha, hash `scrypt`, sessão em cookie JWT `httpOnly`.
 - **Arquivos:** armazenamento em disco local, servido por rota autenticada.
 
-Não há dependência de serviços externos: o app roda em qualquer máquina com
-Node.js e um disco persistente (VPS, Railway, Fly, um container, etc.).
+Compartilhamento familiar: cada usuário pertence a uma **família (household)**;
+os membros compartilham os mesmos dados, com papéis admin / membro / leitor.
 
 ## Começando
 
 ```bash
 pnpm install
-cp .env.example .env          # gere um JWT_SECRET (veja o arquivo)
+cp .env.example .env          # defina DATABASE_URL e gere um JWT_SECRET
 pnpm dev                      # http://localhost:3000
 ```
 
-A primeira conta criada na tela de login vira **administrador** (o "dono").
-O esquema do banco é aplicado automaticamente na primeira execução.
+Você precisa de um banco MySQL acessível via `DATABASE_URL`. As tabelas são
+criadas automaticamente no boot (migrações aplicadas). A primeira conta criada
+na tela de login vira **administrador** e dona de uma nova família.
 
 ## Produção
 
@@ -41,23 +42,21 @@ pnpm build      # gera dist/ (cliente + servidor)
 pnpm start      # NODE_ENV=production node dist/index.js
 ```
 
-Defina `JWT_SECRET` (obrigatório), e opcionalmente `DATA_DIR` para apontar o
-banco e os uploads para um volume persistente. Coloque a aplicação atrás de um
+Defina `DATABASE_URL` e `JWT_SECRET` (obrigatórios). Os uploads ficam em disco
+(`DATA_DIR`); aponte para um volume persistente. Coloque a aplicação atrás de um
 proxy HTTPS — os cookies de sessão são marcados como `secure` automaticamente
 quando a requisição chega via HTTPS.
 
 ## Variáveis de ambiente
 
-| Variável            | Padrão            | Descrição                                            |
-| ------------------- | ----------------- | ---------------------------------------------------- |
-| `JWT_SECRET`        | —                 | **Obrigatório em produção.** Assina o cookie de sessão. |
-| `PORT`              | `3000`            | Porta HTTP.                                          |
-| `DATA_DIR`          | `./.data`         | Pasta com o banco SQLite e os uploads.               |
-| `DATABASE_FILE`     | `$DATA_DIR/app.db`| Caminho do arquivo SQLite.                           |
-| `STORAGE_DIR`       | `$DATA_DIR/uploads`| Pasta dos arquivos enviados.                        |
-| `OWNER_EMAIL`       | —                 | E-mail que recebe papel de admin ao se cadastrar.    |
-| `ALLOW_REGISTRATION`| `true`            | `false` desativa novos cadastros após o onboarding.  |
-| `MAX_UPLOAD_BYTES`  | `16777216` (16MB) | Tamanho máximo de upload.                            |
+| Variável           | Padrão              | Descrição                                               |
+| ------------------ | ------------------- | ------------------------------------------------------- |
+| `DATABASE_URL`     | —                   | **Obrigatório.** `mysql://user:senha@host:3306/banco`.  |
+| `JWT_SECRET`       | —                   | **Obrigatório em produção.** Assina o cookie de sessão. |
+| `PORT`             | `3000`              | Porta HTTP.                                             |
+| `DATA_DIR`         | `./.data`           | Pasta base dos uploads.                                 |
+| `STORAGE_DIR`      | `$DATA_DIR/uploads` | Pasta dos arquivos enviados.                            |
+| `MAX_UPLOAD_BYTES` | `16777216` (16MB)   | Tamanho máximo de upload.                               |
 
 ## Estrutura
 
@@ -68,7 +67,7 @@ client/src/
   lib/trpc.ts   Cliente tRPC
 drizzle/
   schema.ts     Tabelas e tipos
-  migrations/   Migrações SQLite (geradas por `pnpm db:generate`)
+  migrations/   Migrações MySQL (geradas por `pnpm db:generate`, aplicadas no boot)
 server/
   routers.ts    Procedures tRPC + rotas de upload/download
   db.ts         Helpers de consulta

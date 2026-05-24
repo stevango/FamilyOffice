@@ -4,6 +4,7 @@ import express from "express";
 import { createServer } from "http";
 import net from "net";
 import { appRouter, registerFileRoutes } from "../routers";
+import { migrateDb } from "../db";
 import { createContext } from "./context";
 import { ENV } from "./env";
 import { serveStatic, setupVite } from "./vite";
@@ -38,6 +39,8 @@ function securityHeaders(): express.RequestHandler {
 }
 
 async function startServer() {
+  await migrateDb();
+
   const app = express();
   const server = createServer(app);
 
