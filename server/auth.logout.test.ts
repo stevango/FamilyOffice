@@ -11,10 +11,11 @@ function createAuthContext(): { ctx: TrpcContext; clearedCookies: CookieCall[] }
   const ctx: TrpcContext = {
     user: {
       id: 1,
+      householdId: 1,
       email: "sample@example.com",
       name: "Sample User",
       passwordHash: "x",
-      role: "user",
+      role: "admin",
       createdAt: new Date(),
       updatedAt: new Date(),
       lastSignedIn: new Date(),

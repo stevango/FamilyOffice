@@ -2,6 +2,7 @@ import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { TRPCError } from "@trpc/server";
 import type { Application, Request, Response } from "express";
 import express from "express";
+import { nanoid } from "nanoid";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { ENV } from "./_core/env";
@@ -13,7 +14,7 @@ import {
   verifyPassword,
 } from "./_core/session";
 import { systemRouter } from "./_core/systemRouter";
-import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { adminProcedure, protectedProcedure, publicProcedure, router, writeProcedure } from "./_core/trpc";
 import * as db from "./db";
 import { storageDelete, storagePut, storageReadStream, storageStat } from "./storage";
 
@@ -34,6 +35,7 @@ function rateLimit(key: string, max: number, windowMs: number) {
 
 const emailSchema = z.string().trim().toLowerCase().email("E-mail inválido");
 const passwordSchema = z.string().min(8, "A senha deve ter ao menos 8 caracteres").max(200);
+const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 function clientIp(req: Request): string {
   const fwd = req.headers["x-forwarded-for"];
@@ -54,8 +56,12 @@ function addMonthsIso(iso: string, n: number): string {
 export function registerFileRoutes(app: Application) {
   app.post("/api/upload", express.raw({ type: "*/*", limit: ENV.maxUploadBytes }), async (req, res) => {
     const user = await getUserFromRequest(req).catch(() => null);
-    if (!user) {
+    if (!user || user.householdId == null) {
       res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    if (user.role === "viewer") {
+      res.status(403).json({ error: "Read-only" });
       return;
     }
 
@@ -83,7 +89,7 @@ export function registerFileRoutes(app: Application) {
 
   app.get("/api/files/*", async (req: Request, res: Response) => {
     const user = await getUserFromRequest(req).catch(() => null);
-    if (!user) {
+    if (!user || user.householdId == null) {
       res.status(401).send("Unauthorized");
       return;
     }
@@ -93,8 +99,8 @@ export function registerFileRoutes(app: Application) {
       return;
     }
 
-    // Only serve files the requesting user actually owns a document for.
-    const doc = await db.getDocumentByKey(user.id, key);
+    // Only serve files that belong to a document in the user's household.
+    const doc = await db.getDocumentByKey(user.householdId, key);
     if (!doc) {
       res.status(404).send("Not found");
       return;
@@ -119,10 +125,15 @@ export const appRouter = router({
     /** Public bootstrap info for the login screen. */
     config: publicProcedure.query(async () => {
       const userCount = await db.countUsers();
-      return {
-        needsSetup: userCount === 0,
-        allowRegistration: ENV.allowRegistration || userCount === 0,
-      };
+      return { needsSetup: userCount === 0 };
+    }),
+
+    /** Validate an invite code so the join screen can show the family name. */
+    inviteInfo: publicProcedure.input(z.object({ code: z.string() })).query(async ({ input }) => {
+      const invite = await db.getValidInvite(input.code.trim());
+      if (!invite) return { valid: false as const };
+      const household = await db.getHousehold(invite.householdId);
+      return { valid: true as const, householdName: household?.name ?? "Família", role: invite.role };
     }),
 
     me: publicProcedure.query(({ ctx }) => (ctx.user ? toPublicUser(ctx.user) : null)),
@@ -132,24 +143,43 @@ export const appRouter = router({
         email: emailSchema,
         password: passwordSchema,
         name: z.string().trim().min(1).max(120).optional(),
+        inviteCode: z.string().trim().optional(),
+        householdName: z.string().trim().min(1).max(120).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         rateLimit(`register:${clientIp(ctx.req)}`, 10, 60 * 60 * 1000);
 
-        const userCount = await db.countUsers();
-        const isFirstUser = userCount === 0;
-        if (!isFirstUser && !ENV.allowRegistration) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Cadastro desativado." });
-        }
         if (await db.getUserByEmail(input.email)) {
           throw new TRPCError({ code: "CONFLICT", message: "Já existe uma conta com este e-mail." });
         }
 
-        const passwordHash = await hashPassword(input.password);
-        const role = isFirstUser || input.email === ENV.ownerEmail ? "admin" : "user";
-        const user = await db.createUser({ email: input.email, name: input.name ?? null, passwordHash, role });
-        if (!user) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Falha ao criar conta." });
+        const isFirstUser = (await db.countUsers()) === 0;
+        let householdId: number;
+        let role: "admin" | "member" | "viewer";
 
+        if (isFirstUser) {
+          householdId = await db.createHousehold(input.householdName || (input.name ? `Família ${input.name}` : "Minha Família"));
+          role = "admin";
+        } else {
+          if (!input.inviteCode) {
+            throw new TRPCError({ code: "FORBIDDEN", message: "É necessário um convite para criar uma conta." });
+          }
+          const invite = await db.getValidInvite(input.inviteCode);
+          if (!invite) {
+            throw new TRPCError({ code: "FORBIDDEN", message: "Convite inválido ou expirado." });
+          }
+          householdId = invite.householdId;
+          role = invite.role;
+          const user = await db.createUser({ email: input.email, name: input.name ?? null, passwordHash: await hashPassword(input.password), role, householdId });
+          if (!user) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Falha ao criar conta." });
+          await db.markInviteUsed(invite.id, user.id);
+          const token = await signSession({ userId: user.id, email: user.email }, ONE_YEAR_MS);
+          ctx.res.cookie(COOKIE_NAME, token, { ...getSessionCookieOptions(ctx.req), maxAge: ONE_YEAR_MS });
+          return toPublicUser(user);
+        }
+
+        const user = await db.createUser({ email: input.email, name: input.name ?? null, passwordHash: await hashPassword(input.password), role, householdId });
+        if (!user) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Falha ao criar conta." });
         const token = await signSession({ userId: user.id, email: user.email }, ONE_YEAR_MS);
         ctx.res.cookie(COOKIE_NAME, token, { ...getSessionCookieOptions(ctx.req), maxAge: ONE_YEAR_MS });
         return toPublicUser(user);
@@ -190,42 +220,87 @@ export const appRouter = router({
       }),
   }),
 
+  // ============ HOUSEHOLD (family) ============
+  household: router({
+    get: protectedProcedure.query(async ({ ctx }) => {
+      const household = await db.getHousehold(ctx.user.householdId);
+      return { id: ctx.user.householdId, name: household?.name ?? "Família", myRole: ctx.user.role };
+    }),
+    rename: adminProcedure.input(z.object({ name: z.string().trim().min(1).max(120) })).mutation(async ({ ctx, input }) => {
+      await db.renameHousehold(ctx.user.householdId, input.name);
+      return { success: true };
+    }),
+    members: protectedProcedure.query(async ({ ctx }) => {
+      return db.getHouseholdMembers(ctx.user.householdId);
+    }),
+    updateMemberRole: adminProcedure
+      .input(z.object({ userId: z.number(), role: z.enum(["admin", "member", "viewer"]) }))
+      .mutation(async ({ ctx, input }) => {
+        const members = await db.getHouseholdMembers(ctx.user.householdId);
+        const target = members.find((m) => m.id === input.userId);
+        if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Membro não encontrado." });
+        if (target.role === "admin" && input.role !== "admin" && (await db.countAdmins(ctx.user.householdId)) <= 1) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "A família precisa de pelo menos um administrador." });
+        }
+        await db.updateUserRole(input.userId, ctx.user.householdId, input.role);
+        return { success: true };
+      }),
+    removeMember: adminProcedure.input(z.object({ userId: z.number() })).mutation(async ({ ctx, input }) => {
+      if (input.userId === ctx.user.id) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Você não pode remover a si mesmo." });
+      }
+      const members = await db.getHouseholdMembers(ctx.user.householdId);
+      const target = members.find((m) => m.id === input.userId);
+      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "Membro não encontrado." });
+      await db.removeUser(input.userId, ctx.user.householdId);
+      return { success: true };
+    }),
+    invites: router({
+      list: adminProcedure.query(async ({ ctx }) => {
+        return db.listInvites(ctx.user.householdId);
+      }),
+      create: adminProcedure.input(z.object({ role: z.enum(["member", "viewer"]).default("member") })).mutation(async ({ ctx, input }) => {
+        const code = nanoid(12);
+        await db.createInvite({
+          householdId: ctx.user.householdId,
+          code,
+          role: input.role,
+          createdBy: ctx.user.id,
+          expiresAt: new Date(Date.now() + INVITE_TTL_MS),
+        });
+        return { code, role: input.role };
+      }),
+      revoke: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+        await db.deleteInvite(input.id, ctx.user.householdId);
+        return { success: true };
+      }),
+    }),
+  }),
+
   // ============ DASHBOARD ============
   dashboard: router({
-    summary: protectedProcedure.query(async ({ ctx }) => {
-      return db.getDashboardSummary(ctx.user.id);
-    }),
-    financialSummary: protectedProcedure.query(async ({ ctx }) => {
-      return db.getTransactionsSummary(ctx.user.id);
-    }),
+    summary: protectedProcedure.query(async ({ ctx }) => db.getDashboardSummary(ctx.user.householdId)),
+    financialSummary: protectedProcedure.query(async ({ ctx }) => db.getTransactionsSummary(ctx.user.householdId)),
     cashFlow: protectedProcedure
       .input(z.object({ months: z.number().min(1).max(24).default(6) }).optional())
-      .query(async ({ ctx, input }) => {
-        return db.getMonthlyCashFlow(ctx.user.id, input?.months ?? 6);
-      }),
+      .query(async ({ ctx, input }) => db.getMonthlyCashFlow(ctx.user.householdId, input?.months ?? 6)),
     alerts: protectedProcedure
       .input(z.object({ horizonDays: z.number().min(1).max(365).default(30) }).optional())
-      .query(async ({ ctx, input }) => {
-        return db.getAlerts(ctx.user.id, input?.horizonDays ?? 30);
-      }),
+      .query(async ({ ctx, input }) => db.getAlerts(ctx.user.householdId, input?.horizonDays ?? 30)),
   }),
 
   // ============ BANK ACCOUNTS ============
   bankAccounts: router({
-    list: protectedProcedure.query(async ({ ctx }) => {
-      return db.getBankAccounts(ctx.user.id);
-    }),
-    create: protectedProcedure.input(z.object({
+    list: protectedProcedure.query(async ({ ctx }) => db.getBankAccounts(ctx.user.householdId)),
+    create: writeProcedure.input(z.object({
       name: z.string().min(1),
       bank: z.string().optional(),
       accountType: z.enum(["checking", "savings", "investment", "digital"]).default("checking"),
       balance: z.string().default("0"),
       currency: z.string().default("BRL"),
       color: z.string().optional(),
-    })).mutation(async ({ ctx, input }) => {
-      return db.createBankAccount({ ...input, userId: ctx.user.id });
-    }),
-    update: protectedProcedure.input(z.object({
+    })).mutation(async ({ ctx, input }) => db.createBankAccount({ ...input, userId: ctx.user.id })),
+    update: writeProcedure.input(z.object({
       id: z.number(),
       name: z.string().min(1).optional(),
       bank: z.string().optional(),
@@ -236,21 +311,19 @@ export const appRouter = router({
       isActive: z.number().optional(),
     })).mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
-      await db.updateBankAccount(id, ctx.user.id, data);
+      await db.updateBankAccount(id, ctx.user.householdId, data);
       return { success: true };
     }),
-    delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
-      await db.deleteBankAccount(input.id, ctx.user.id);
+    delete: writeProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+      await db.deleteBankAccount(input.id, ctx.user.householdId);
       return { success: true };
     }),
   }),
 
   // ============ CARDS ============
   cards: router({
-    list: protectedProcedure.query(async ({ ctx }) => {
-      return db.getCards(ctx.user.id);
-    }),
-    create: protectedProcedure.input(z.object({
+    list: protectedProcedure.query(async ({ ctx }) => db.getCards(ctx.user.householdId)),
+    create: writeProcedure.input(z.object({
       name: z.string().min(1),
       lastDigits: z.string().max(4).optional(),
       brand: z.string().optional(),
@@ -259,10 +332,8 @@ export const appRouter = router({
       closingDay: z.number().min(1).max(31).optional(),
       dueDay: z.number().min(1).max(31).optional(),
       bankAccountId: z.number().optional(),
-    })).mutation(async ({ ctx, input }) => {
-      return db.createCard({ ...input, userId: ctx.user.id });
-    }),
-    update: protectedProcedure.input(z.object({
+    })).mutation(async ({ ctx, input }) => db.createCard({ ...input, userId: ctx.user.id })),
+    update: writeProcedure.input(z.object({
       id: z.number(),
       name: z.string().min(1).optional(),
       lastDigits: z.string().max(4).optional(),
@@ -274,11 +345,11 @@ export const appRouter = router({
       bankAccountId: z.number().optional(),
     })).mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
-      await db.updateCard(id, ctx.user.id, data);
+      await db.updateCard(id, ctx.user.householdId, data);
       return { success: true };
     }),
-    delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
-      await db.deleteCard(input.id, ctx.user.id);
+    delete: writeProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+      await db.deleteCard(input.id, ctx.user.householdId);
       return { success: true };
     }),
   }),
@@ -288,10 +359,8 @@ export const appRouter = router({
     list: protectedProcedure.input(z.object({
       limit: z.number().default(50),
       offset: z.number().default(0),
-    }).optional()).query(async ({ ctx, input }) => {
-      return db.getTransactions(ctx.user.id, input?.limit ?? 50, input?.offset ?? 0);
-    }),
-    create: protectedProcedure.input(z.object({
+    }).optional()).query(async ({ ctx, input }) => db.getTransactions(ctx.user.householdId, input?.limit ?? 50, input?.offset ?? 0)),
+    create: writeProcedure.input(z.object({
       type: z.enum(["income", "expense"]),
       description: z.string().min(1),
       amount: z.string(),
@@ -309,7 +378,6 @@ export const appRouter = router({
       if (!repeatMonths || repeatMonths <= 1) {
         return db.createTransaction({ ...base, userId: ctx.user.id, isRecurring: repeatMonths ? 1 : base.isRecurring });
       }
-      // Materialize one entry per month. Future occurrences are marked unpaid.
       const rows = Array.from({ length: repeatMonths }, (_, i) => ({
         ...base,
         userId: ctx.user.id,
@@ -319,7 +387,7 @@ export const appRouter = router({
       }));
       return db.createTransactions(rows);
     }),
-    update: protectedProcedure.input(z.object({
+    update: writeProcedure.input(z.object({
       id: z.number(),
       type: z.enum(["income", "expense"]).optional(),
       description: z.string().min(1).optional(),
@@ -334,16 +402,14 @@ export const appRouter = router({
       notes: z.string().optional(),
     })).mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
-      await db.updateTransaction(id, ctx.user.id, data as any);
+      await db.updateTransaction(id, ctx.user.householdId, data as any);
       return { success: true };
     }),
-    delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
-      await db.deleteTransaction(input.id, ctx.user.id);
+    delete: writeProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+      await db.deleteTransaction(input.id, ctx.user.householdId);
       return { success: true };
     }),
-    summary: protectedProcedure.query(async ({ ctx }) => {
-      return db.getTransactionsSummary(ctx.user.id);
-    }),
+    summary: protectedProcedure.query(async ({ ctx }) => db.getTransactionsSummary(ctx.user.householdId)),
   }),
 
   // ============ DOCUMENTS ============
@@ -351,10 +417,8 @@ export const appRouter = router({
     list: protectedProcedure.input(z.object({
       search: z.string().optional(),
       category: z.string().optional(),
-    }).optional()).query(async ({ ctx, input }) => {
-      return db.getDocuments(ctx.user.id, input?.search, input?.category);
-    }),
-    create: protectedProcedure.input(z.object({
+    }).optional()).query(async ({ ctx, input }) => db.getDocuments(ctx.user.householdId, input?.search, input?.category)),
+    create: writeProcedure.input(z.object({
       title: z.string().min(1),
       description: z.string().optional(),
       category: z.enum(["personal", "property", "vehicle", "company", "legal", "tax", "insurance", "contract", "certificate", "other"]).default("other"),
@@ -365,10 +429,8 @@ export const appRouter = router({
       mimeType: z.string().optional(),
       tags: z.string().optional(),
       expiresAt: z.string().optional(),
-    })).mutation(async ({ ctx, input }) => {
-      return db.createDocument({ ...input, userId: ctx.user.id, expiresAt: input.expiresAt || null });
-    }),
-    update: protectedProcedure.input(z.object({
+    })).mutation(async ({ ctx, input }) => db.createDocument({ ...input, userId: ctx.user.id, expiresAt: input.expiresAt || null })),
+    update: writeProcedure.input(z.object({
       id: z.number(),
       title: z.string().min(1).optional(),
       description: z.string().optional(),
@@ -377,11 +439,11 @@ export const appRouter = router({
       expiresAt: z.string().optional(),
     })).mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
-      await db.updateDocument(id, ctx.user.id, data as any);
+      await db.updateDocument(id, ctx.user.householdId, data as any);
       return { success: true };
     }),
-    delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
-      const fileKey = await db.deleteDocument(input.id, ctx.user.id);
+    delete: writeProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+      const fileKey = await db.deleteDocument(input.id, ctx.user.householdId);
       if (fileKey) await storageDelete(fileKey);
       return { success: true };
     }),
@@ -391,10 +453,8 @@ export const appRouter = router({
   assets: router({
     list: protectedProcedure.input(z.object({
       assetType: z.string().optional(),
-    }).optional()).query(async ({ ctx, input }) => {
-      return db.getAssets(ctx.user.id, input?.assetType);
-    }),
-    create: protectedProcedure.input(z.object({
+    }).optional()).query(async ({ ctx, input }) => db.getAssets(ctx.user.householdId, input?.assetType)),
+    create: writeProcedure.input(z.object({
       name: z.string().min(1),
       assetType: z.enum(["property", "vehicle", "company", "investment", "other"]),
       description: z.string().optional(),
@@ -404,10 +464,8 @@ export const appRouter = router({
       location: z.string().optional(),
       status: z.enum(["active", "sold", "inactive"]).default("active"),
       notes: z.string().optional(),
-    })).mutation(async ({ ctx, input }) => {
-      return db.createAsset({ ...input, userId: ctx.user.id, acquisitionDate: input.acquisitionDate || null });
-    }),
-    update: protectedProcedure.input(z.object({
+    })).mutation(async ({ ctx, input }) => db.createAsset({ ...input, userId: ctx.user.id, acquisitionDate: input.acquisitionDate || null })),
+    update: writeProcedure.input(z.object({
       id: z.number(),
       name: z.string().min(1).optional(),
       assetType: z.enum(["property", "vehicle", "company", "investment", "other"]).optional(),
@@ -420,24 +478,20 @@ export const appRouter = router({
       notes: z.string().optional(),
     })).mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
-      await db.updateAsset(id, ctx.user.id, data as any);
+      await db.updateAsset(id, ctx.user.householdId, data as any);
       return { success: true };
     }),
-    delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
-      await db.deleteAsset(input.id, ctx.user.id);
+    delete: writeProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+      await db.deleteAsset(input.id, ctx.user.householdId);
       return { success: true };
     }),
-    summary: protectedProcedure.query(async ({ ctx }) => {
-      return db.getAssetsSummary(ctx.user.id);
-    }),
+    summary: protectedProcedure.query(async ({ ctx }) => db.getAssetsSummary(ctx.user.householdId)),
   }),
 
   // ============ LEGAL CASES ============
   legalCases: router({
-    list: protectedProcedure.query(async ({ ctx }) => {
-      return db.getLegalCases(ctx.user.id);
-    }),
-    create: protectedProcedure.input(z.object({
+    list: protectedProcedure.query(async ({ ctx }) => db.getLegalCases(ctx.user.householdId)),
+    create: writeProcedure.input(z.object({
       title: z.string().min(1),
       caseNumber: z.string().optional(),
       caseType: z.enum(["favorable", "unfavorable", "neutral"]).default("neutral"),
@@ -449,10 +503,8 @@ export const appRouter = router({
       nextDeadline: z.string().optional(),
       description: z.string().optional(),
       notes: z.string().optional(),
-    })).mutation(async ({ ctx, input }) => {
-      return db.createLegalCase({ ...input, userId: ctx.user.id, nextDeadline: input.nextDeadline || null });
-    }),
-    update: protectedProcedure.input(z.object({
+    })).mutation(async ({ ctx, input }) => db.createLegalCase({ ...input, userId: ctx.user.id, nextDeadline: input.nextDeadline || null })),
+    update: writeProcedure.input(z.object({
       id: z.number(),
       title: z.string().min(1).optional(),
       caseNumber: z.string().optional(),
@@ -467,11 +519,11 @@ export const appRouter = router({
       notes: z.string().optional(),
     })).mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
-      await db.updateLegalCase(id, ctx.user.id, data as any);
+      await db.updateLegalCase(id, ctx.user.householdId, data as any);
       return { success: true };
     }),
-    delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
-      await db.deleteLegalCase(input.id, ctx.user.id);
+    delete: writeProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+      await db.deleteLegalCase(input.id, ctx.user.householdId);
       return { success: true };
     }),
   }),

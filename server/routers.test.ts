@@ -8,10 +8,11 @@ type CookieCall = { name: string; options: Record<string, unknown> };
 
 const sampleUser: User = {
   id: 1,
+  householdId: 1,
   email: "test@example.com",
   name: "Test User",
   passwordHash: "secret-hash",
-  role: "user",
+  role: "admin",
   createdAt: new Date(),
   updatedAt: new Date(),
   lastSignedIn: new Date(),

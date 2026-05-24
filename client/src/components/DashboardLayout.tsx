@@ -31,6 +31,7 @@ import {
   Building2,
   Scale,
   Shield,
+  Users,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -42,6 +43,7 @@ const menuItems = [
   { icon: FileText, label: "Documentos", path: "/documentos" },
   { icon: Building2, label: "Patrimônio", path: "/patrimonio" },
   { icon: Scale, label: "Jurídico", path: "/juridico" },
+  { icon: Users, label: "Família", path: "/familia" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";

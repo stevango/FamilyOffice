@@ -17,6 +17,7 @@ const Financeiro = lazy(() => import("./pages/Financeiro"));
 const Documentos = lazy(() => import("./pages/Documentos"));
 const Patrimonio = lazy(() => import("./pages/Patrimonio"));
 const Juridico = lazy(() => import("./pages/Juridico"));
+const Familia = lazy(() => import("./pages/Familia"));
 
 function PageFallback() {
   return (
@@ -36,6 +37,7 @@ function AuthenticatedApp() {
           <Route path="/documentos" component={Documentos} />
           <Route path="/patrimonio" component={Patrimonio} />
           <Route path="/juridico" component={Juridico} />
+          <Route path="/familia" component={Familia} />
           <Route component={NotFound} />
         </Switch>
       </Suspense>

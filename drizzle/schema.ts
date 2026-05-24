@@ -11,14 +11,30 @@ const timestamps = {
 };
 
 /**
- * Core user table backing the email/password auth flow.
+ * A family/household. All of a household's members share the same financial,
+ * patrimonial, document and legal data.
+ */
+export const households = sqliteTable("households", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  ...timestamps,
+});
+
+export type Household = typeof households.$inferSelect;
+export type InsertHousehold = typeof households.$inferInsert;
+
+/**
+ * Core user table backing the email/password auth flow. Each user belongs to
+ * one household and has a role within it: admin (manages members), member
+ * (read+write) or viewer (read-only).
  */
 export const users = sqliteTable("users", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  householdId: integer("householdId"),
   email: text("email").notNull().unique(),
   name: text("name"),
   passwordHash: text("passwordHash").notNull(),
-  role: text("role", { enum: ["user", "admin"] }).notNull().default("user"),
+  role: text("role", { enum: ["admin", "member", "viewer"] }).notNull().default("member"),
   ...timestamps,
   lastSignedIn: integer("lastSignedIn", { mode: "timestamp" })
     .notNull()
@@ -27,8 +43,27 @@ export const users = sqliteTable("users", {
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
+export type Role = User["role"];
 /** User shape safe to send to the client (never includes the password hash). */
 export type PublicUser = Omit<User, "passwordHash">;
+
+/**
+ * Invite codes for joining a household with a given role.
+ */
+export const invites = sqliteTable("invites", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  householdId: integer("householdId").notNull(),
+  code: text("code").notNull().unique(),
+  role: text("role", { enum: ["member", "viewer"] }).notNull().default("member"),
+  createdBy: integer("createdBy").notNull(),
+  expiresAt: integer("expiresAt", { mode: "timestamp" }).notNull(),
+  usedBy: integer("usedBy"),
+  usedAt: integer("usedAt", { mode: "timestamp" }),
+  createdAt: integer("createdAt", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+}, (t) => [index("invites_householdId_idx").on(t.householdId)]);
+
+export type Invite = typeof invites.$inferSelect;
+export type InsertInvite = typeof invites.$inferInsert;
 
 /**
  * Contas bancárias. Monetary values are stored as decimal strings to avoid
