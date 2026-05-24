@@ -168,6 +168,17 @@ export const appRouter = router({
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
+
+    changePassword: protectedProcedure
+      .input(z.object({ currentPassword: z.string().min(1), newPassword: passwordSchema }))
+      .mutation(async ({ ctx, input }) => {
+        const ok = await verifyPassword(input.currentPassword, ctx.user.passwordHash);
+        if (!ok) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Senha atual incorreta." });
+        }
+        await db.updateUserPassword(ctx.user.id, await hashPassword(input.newPassword));
+        return { success: true } as const;
+      }),
   }),
 
   // ============ DASHBOARD ============

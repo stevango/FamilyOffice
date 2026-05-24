@@ -24,6 +24,7 @@ import { useIsMobile } from "@/hooks/useMobile";
 import {
   LayoutDashboard,
   LogOut,
+  KeyRound,
   PanelLeft,
   Wallet,
   FileText,
@@ -33,6 +34,7 @@ import {
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { AccountDialog } from "./AccountDialog";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
@@ -90,6 +92,7 @@ function DashboardLayoutContent({
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const activeMenuItem = menuItems.find(item => item.path === location);
   const isMobile = useIsMobile();
@@ -200,6 +203,10 @@ function DashboardLayoutContent({
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={() => setAccountOpen(true)} className="cursor-pointer">
+                  <KeyRound className="mr-2 h-4 w-4" />
+                  <span>Alterar senha</span>
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={logout}
@@ -210,6 +217,7 @@ function DashboardLayoutContent({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            <AccountDialog open={accountOpen} onOpenChange={setAccountOpen} />
           </SidebarFooter>
         </Sidebar>
         <div

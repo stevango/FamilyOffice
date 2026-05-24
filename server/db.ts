@@ -55,6 +55,10 @@ export async function touchLastSignedIn(id: number) {
   await getDb().update(users).set({ lastSignedIn: new Date() }).where(eq(users.id, id));
 }
 
+export async function updateUserPassword(id: number, passwordHash: string) {
+  await getDb().update(users).set({ passwordHash }).where(eq(users.id, id));
+}
+
 // ============ BANK ACCOUNTS ============
 
 export async function getBankAccounts(userId: number) {
