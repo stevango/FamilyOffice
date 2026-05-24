@@ -112,6 +112,12 @@ export async function createTransaction(data: InsertTransaction) {
   return { id: row.id };
 }
 
+export async function createTransactions(rows: InsertTransaction[]) {
+  if (rows.length === 0) return { count: 0 };
+  await getDb().insert(transactions).values(rows);
+  return { count: rows.length };
+}
+
 export async function updateTransaction(id: number, userId: number, data: Partial<InsertTransaction>) {
   await getDb().update(transactions).set(data).where(and(eq(transactions.id, id), eq(transactions.userId, userId)));
 }

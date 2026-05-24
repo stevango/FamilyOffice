@@ -31,8 +31,10 @@ import {
   Trash2,
   MapPin,
   Package,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
+import { downloadCsv } from "@/lib/export";
 
 function formatCurrency(value: number | string) {
   const num = typeof value === "string" ? parseFloat(value) : value;
@@ -131,6 +133,22 @@ export default function Patrimonio() {
     setForm({ name: "", assetType: "property", description: "", estimatedValue: "", acquisitionValue: "", acquisitionDate: "", location: "", notes: "" });
   };
 
+  const handleExport = () => {
+    if (!assets || assets.length === 0) {
+      toast.error("Nenhum ativo para exportar");
+      return;
+    }
+    downloadCsv(`patrimonio-${new Date().toISOString().slice(0, 10)}`, assets as any[], [
+      { key: "name", label: "Nome" },
+      { key: "assetType", label: "Tipo", format: (a) => assetTypeLabels[a.assetType] ?? a.assetType },
+      { key: "status", label: "Status", format: (a) => statusLabels[a.status] ?? a.status },
+      { key: "estimatedValue", label: "Valor Estimado" },
+      { key: "acquisitionValue", label: "Valor Aquisição" },
+      { key: "acquisitionDate", label: "Data Aquisição" },
+      { key: "location", label: "Localização" },
+    ]);
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -172,6 +190,10 @@ export default function Patrimonio() {
           </TabsList>
         </Tabs>
 
+        <div className="flex gap-2">
+        <Button variant="outline" size="sm" className="gap-2" onClick={handleExport}>
+          <Download className="h-4 w-4" /> Exportar
+        </Button>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button size="sm" className="gap-2">
@@ -232,6 +254,7 @@ export default function Patrimonio() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Assets List */}

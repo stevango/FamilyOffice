@@ -32,8 +32,10 @@ import {
   CheckCircle2,
   PauseCircle,
   Archive,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
+import { downloadCsv } from "@/lib/export";
 
 function formatCurrency(value: number | string | null) {
   if (!value) return "-";
@@ -142,6 +144,24 @@ export default function Juridico() {
   const activeCases = cases?.filter((c: any) => c.status === "active").length ?? 0;
   const totalEstimatedCost = cases?.reduce((sum: number, c: any) => sum + parseFloat(c.estimatedCost || "0"), 0) ?? 0;
 
+  const handleExport = () => {
+    if (!cases || cases.length === 0) {
+      toast.error("Nenhum processo para exportar");
+      return;
+    }
+    downloadCsv(`processos-${new Date().toISOString().slice(0, 10)}`, cases as any[], [
+      { key: "title", label: "Título" },
+      { key: "caseNumber", label: "Número" },
+      { key: "caseType", label: "Tipo", format: (c) => caseTypeLabels[c.caseType] ?? c.caseType },
+      { key: "status", label: "Status", format: (c) => statusLabels[c.status] ?? c.status },
+      { key: "court", label: "Vara/Tribunal" },
+      { key: "lawyer", label: "Advogado" },
+      { key: "estimatedCost", label: "Custo Estimado" },
+      { key: "actualCost", label: "Custo Real" },
+      { key: "nextDeadline", label: "Próximo Prazo" },
+    ]);
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -181,7 +201,10 @@ export default function Juridico() {
       </div>
 
       {/* Add Button */}
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" size="sm" className="gap-2" onClick={handleExport}>
+          <Download className="h-4 w-4" /> Exportar
+        </Button>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button size="sm" className="gap-2">

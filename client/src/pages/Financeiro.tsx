@@ -30,8 +30,11 @@ import {
   Trash2,
   ArrowUpRight,
   ArrowDownRight,
+  Download,
+  Repeat,
 } from "lucide-react";
 import { toast } from "sonner";
+import { downloadCsv } from "@/lib/export";
 
 function formatCurrency(value: number | string) {
   const num = typeof value === "string" ? parseFloat(value) : value;
@@ -110,19 +113,38 @@ function TransactionsTab() {
     },
   });
 
-  const [form, setForm] = useState({
+  const blankForm = {
     type: "expense" as "income" | "expense",
     description: "",
     amount: "",
     category: "",
     transactionDate: new Date().toISOString().split("T")[0],
-  });
+    repeatMonths: "1",
+  };
+  const [form, setForm] = useState(blankForm);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.description || !form.amount) return;
-    createMutation.mutate(form);
-    setForm({ type: "expense", description: "", amount: "", category: "", transactionDate: new Date().toISOString().split("T")[0] });
+    const { repeatMonths, ...rest } = form;
+    const months = parseInt(repeatMonths, 10);
+    createMutation.mutate(months > 1 ? { ...rest, repeatMonths: months } : rest);
+    setForm(blankForm);
+  };
+
+  const handleExport = () => {
+    if (!transactions || transactions.length === 0) {
+      toast.error("Nenhum lançamento para exportar");
+      return;
+    }
+    downloadCsv(`lancamentos-${new Date().toISOString().slice(0, 10)}`, transactions as any[], [
+      { key: "transactionDate", label: "Data" },
+      { key: "type", label: "Tipo", format: (t) => (t.type === "income" ? "Receita" : "Despesa") },
+      { key: "description", label: "Descrição" },
+      { key: "category", label: "Categoria" },
+      { key: "amount", label: "Valor" },
+      { key: "isPaid", label: "Pago", format: (t) => (t.isPaid ? "Sim" : "Não") },
+    ]);
   };
 
   if (isLoading) {
@@ -163,7 +185,10 @@ function TransactionsTab() {
       </div>
 
       {/* Add Transaction */}
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" size="sm" className="gap-2" onClick={handleExport}>
+          <Download className="h-4 w-4" /> Exportar
+        </Button>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button size="sm" className="gap-2">
@@ -204,6 +229,26 @@ function TransactionsTab() {
                   <Label>Categoria</Label>
                   <Input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="Ex: Moradia" />
                 </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5">
+                  <Repeat className="h-3.5 w-3.5" /> Repetir mensalmente
+                </Label>
+                <Select value={form.repeatMonths} onValueChange={(v) => setForm({ ...form, repeatMonths: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">Não repetir</SelectItem>
+                    <SelectItem value="3">Por 3 meses</SelectItem>
+                    <SelectItem value="6">Por 6 meses</SelectItem>
+                    <SelectItem value="12">Por 12 meses</SelectItem>
+                    <SelectItem value="24">Por 24 meses</SelectItem>
+                  </SelectContent>
+                </Select>
+                {form.repeatMonths !== "1" && (
+                  <p className="text-xs text-muted-foreground">
+                    Serão criados {form.repeatMonths} lançamentos, um por mês. Os meses futuros entram como não pagos.
+                  </p>
+                )}
               </div>
               <Button type="submit" className="w-full" disabled={createMutation.isPending}>
                 {createMutation.isPending ? "Salvando..." : "Salvar"}

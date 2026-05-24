@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { downloadCsv } from "@/lib/export";
 
 const categoryLabels: Record<string, string> = {
   personal: "Pessoal",
@@ -148,6 +149,21 @@ export default function Documentos() {
     }
   };
 
+  const handleExport = () => {
+    if (!documents || documents.length === 0) {
+      toast.error("Nenhum documento para exportar");
+      return;
+    }
+    downloadCsv(`documentos-${new Date().toISOString().slice(0, 10)}`, documents as any[], [
+      { key: "title", label: "Título" },
+      { key: "category", label: "Categoria", format: (d) => categoryLabels[d.category] ?? d.category },
+      { key: "fileName", label: "Arquivo" },
+      { key: "tags", label: "Tags" },
+      { key: "expiresAt", label: "Vencimento" },
+      { key: "createdAt", label: "Adicionado em", format: (d) => formatDate(d.createdAt) },
+    ]);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.title || !uploadedFile) {
@@ -200,6 +216,9 @@ export default function Documentos() {
             ))}
           </SelectContent>
         </Select>
+        <Button variant="outline" size="sm" className="gap-2" onClick={handleExport}>
+          <Download className="h-4 w-4" /> Exportar
+        </Button>
         <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setUploadedFile(null); } }}>
           <DialogTrigger asChild>
             <Button size="sm" className="gap-2">

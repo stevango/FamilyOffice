@@ -41,6 +41,15 @@ function clientIp(req: Request): string {
   return req.socket.remoteAddress ?? "unknown";
 }
 
+/** Add `n` months to an ISO date (YYYY-MM-DD), clamping to the month's last day. */
+function addMonthsIso(iso: string, n: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const base = new Date(Date.UTC(y, m - 1 + n, 1));
+  const lastDay = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + 1, 0)).getUTCDate();
+  base.setUTCDate(Math.min(d, lastDay));
+  return base.toISOString().slice(0, 10);
+}
+
 // ---- File routes (upload + authenticated download), registered in index.ts ----
 export function registerFileRoutes(app: Application) {
   app.post("/api/upload", express.raw({ type: "*/*", limit: ENV.maxUploadBytes }), async (req, res) => {
@@ -294,8 +303,21 @@ export const appRouter = router({
       isPaid: z.number().default(1),
       isRecurring: z.number().default(0),
       notes: z.string().optional(),
+      repeatMonths: z.number().min(1).max(60).optional(),
     })).mutation(async ({ ctx, input }) => {
-      return db.createTransaction({ ...input, userId: ctx.user.id });
+      const { repeatMonths, ...base } = input;
+      if (!repeatMonths || repeatMonths <= 1) {
+        return db.createTransaction({ ...base, userId: ctx.user.id, isRecurring: repeatMonths ? 1 : base.isRecurring });
+      }
+      // Materialize one entry per month. Future occurrences are marked unpaid.
+      const rows = Array.from({ length: repeatMonths }, (_, i) => ({
+        ...base,
+        userId: ctx.user.id,
+        transactionDate: addMonthsIso(base.transactionDate, i),
+        isRecurring: 1,
+        isPaid: i === 0 ? base.isPaid : 0,
+      }));
+      return db.createTransactions(rows);
     }),
     update: protectedProcedure.input(z.object({
       id: z.number(),
