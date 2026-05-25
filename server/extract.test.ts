@@ -21,6 +21,37 @@ describe("extractFields", () => {
     expect(f.validade).toBe("10/05/2030");
   });
 
+  it("extracts CNH fields", () => {
+    const text =
+      "CARTEIRA NACIONAL DE HABILITACAO REGISTRO 12345678900 CPF 123.456.789-09 CAT. HAB. AB VALIDADE 10/05/2030 1 HABILITACAO 15/03/2008 DETRAN SP";
+    const f = extractFields(text, "cnh");
+    expect(f.numeroRegistro).toBe("12345678900");
+    expect(f.cpf).toBe("123.456.789-09");
+    expect(f.categoria).toBe("AB");
+    expect(f.validade).toBe("10/05/2030");
+    expect(f.primeiraHabilitacao).toBe("15/03/2008");
+    expect(f.orgaoEmissor).toBe("DETRAN-SP");
+  });
+
+  it("extracts RG and issuing authority for personal documents", () => {
+    const f = extractFields("RG 12.345.678-9 SSP/SP CPF 123.456.789-09", "personal");
+    expect(f.rg).toBe("12.345.678-9");
+    expect(f.orgaoEmissor).toBe("SSP-SP");
+  });
+
+  it("extracts company name and state registration", () => {
+    const f = extractFields("RAZAO SOCIAL: ACME LTDA CNPJ 12.345.678/0001-90 INSCRICAO ESTADUAL 110.042.490.114", "company");
+    expect(f.cnpj).toBe("12.345.678/0001-90");
+    expect(f.razaoSocial).toContain("ACME LTDA");
+    expect(f.inscricaoEstadual).toBe("110.042.490.114");
+  });
+
+  it("extracts monetary amounts for insurance", () => {
+    const f = extractFields("APOLICE 9988776655 VIGENCIA 01/01/2026 PREMIO R$ 1.234,56", "insurance");
+    expect(f.apolice).toBe("9988776655");
+    expect(f.valor).toBe("R$ 1.234,56");
+  });
+
   it("extracts CNPJ for company documents", () => {
     expect(extractFields("Razao Social X CNPJ 12.345.678/0001-90", "company").cnpj).toBe("12.345.678/0001-90");
   });

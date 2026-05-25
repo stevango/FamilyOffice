@@ -37,6 +37,57 @@ function detectYear(text: string): string | undefined {
   return text.match(/\bAN[OO][:\s]*((?:19|20)\d{2})\b/i)?.[1] ?? text.match(/\bEXERC[IÍ]CIO[:\s]*((?:19|20)\d{2})\b/i)?.[1];
 }
 
+/** A date that follows a "validade/válida até" label, else the first date found. */
+function detectValidade(text: string): string | undefined {
+  return text.match(/(?:VALIDADE|V[ÁA]LIDA?\s+AT[ÉE])[:\s]*(\d{2}\/\d{2}\/\d{4})/i)?.[1] ?? detectFirstDate(text);
+}
+
+function detectRg(text: string): string | undefined {
+  return text.match(/\bRG[:\s]*([\d.]{5,12}-?[\dxX])/i)?.[1];
+}
+
+/** Issuing authority such as SSP-SP or DETRAN/RJ. */
+function detectOrgaoEmissor(text: string): string | undefined {
+  const m = text.match(/\b(SSP|DETRAN)\s*[\/-]?\s*([A-Z]{2})?\b/i);
+  if (!m) return undefined;
+  return m[2] ? `${m[1].toUpperCase()}-${m[2].toUpperCase()}` : m[1].toUpperCase();
+}
+
+/** A monetary amount like "R$ 1.234,56". */
+function detectValor(text: string): string | undefined {
+  const m = text.match(/R\$\s*([\d.]{1,12},\d{2})/);
+  return m ? `R$ ${m[1]}` : undefined;
+}
+
+function detectRazaoSocial(text: string): string | undefined {
+  return text.match(/(?:RAZ[ÃA]O\s+SOCIAL|NOME\s+EMPRESARIAL)[:\s]+([A-ZÀ-Ú0-9][^\n;]{2,60})/i)?.[1]?.trim();
+}
+
+function detectInscricaoEstadual(text: string): string | undefined {
+  return text.match(/INSCRI[ÇC][ÃA]O\s+ESTADUAL[:\s]*([\d.\/-]{6,20})/i)?.[1];
+}
+
+function detectMatricula(text: string): string | undefined {
+  return text.match(/MATR[IÍ]CULA[:\s]*(?:N[º°.]?\s*)?(\d{2,})/i)?.[1];
+}
+
+function detectApolice(text: string): string | undefined {
+  return text.match(/AP[ÓO]LICE[:\s]*(?:N[º°.]?\s*)?([\d.\-\/]{4,})/i)?.[1];
+}
+
+function detectCnhRegistro(text: string): string | undefined {
+  return text.match(/(?:N[º°.]?\s*)?REGISTRO[:\s]*(\d{9,11})/i)?.[1];
+}
+
+/** CNH driving category (A, B, AB, AC, ...). Tolerates the "CAT. HAB." label. */
+function detectCnhCategoria(text: string): string | undefined {
+  return text.match(/\bCAT(?:EGORIA)?\.?\s*(?:HAB\.?)?\s*[:]?\s*(ACC|AB|AC|AD|AE|A|B|C|D|E)\b/i)?.[1]?.toUpperCase();
+}
+
+function detectPrimeiraHabilitacao(text: string): string | undefined {
+  return text.match(/(?:1[ªA°º.]?\s*|PRIMEIRA\s+)HABILITA[ÇC][ÃA]O[:\s]*(\d{2}\/\d{2}\/\d{4})/i)?.[1];
+}
+
 /** Map raw OCR/PDF text to the structured fields of a category (best effort). */
 export function extractFields(text: string, category: string): Record<string, string> {
   const t = text.replace(/ /g, " ");
@@ -54,17 +105,39 @@ export function extractFields(text: string, category: string): Record<string, st
       break;
     case "personal":
       set("cpf", detectCpf(t));
-      set("validade", detectFirstDate(t));
+      set("rg", detectRg(t));
+      set("orgaoEmissor", detectOrgaoEmissor(t));
+      set("validade", detectValidade(t));
+      break;
+    case "cnh":
+      set("cpf", detectCpf(t));
+      set("numeroRegistro", detectCnhRegistro(t));
+      set("categoria", detectCnhCategoria(t));
+      set("validade", detectValidade(t));
+      set("primeiraHabilitacao", detectPrimeiraHabilitacao(t));
+      set("orgaoEmissor", detectOrgaoEmissor(t));
       break;
     case "company":
       set("cnpj", detectCnpj(t));
+      set("razaoSocial", detectRazaoSocial(t));
+      set("inscricaoEstadual", detectInscricaoEstadual(t));
+      break;
+    case "property":
+      set("matricula", detectMatricula(t));
       break;
     case "tax":
       set("cpfCnpj", detectCnpj(t) ?? detectCpf(t));
       set("exercicio", detectYear(t));
+      set("valor", detectValor(t));
       break;
     case "insurance":
+      set("apolice", detectApolice(t));
       set("vigencia", detectFirstDate(t));
+      set("valor", detectValor(t));
+      break;
+    case "contract":
+      set("vigencia", detectFirstDate(t));
+      set("valor", detectValor(t));
       break;
     case "certificate":
       set("dataEmissao", detectFirstDate(t));

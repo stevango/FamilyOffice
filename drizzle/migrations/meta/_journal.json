@@ -15,6 +15,13 @@
       "when": 1779674601709,
       "tag": "0001_whole_diamondback",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1779675684787,
+      "tag": "0002_natural_senator_kelly",
+      "breakpoints": true
     }
   ]
 }

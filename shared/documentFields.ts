@@ -28,6 +28,15 @@ export const CATEGORY_FIELDS: Record<string, DocField[]> = {
     { key: "orgaoEmissor", label: "Órgão emissor" },
     { key: "validade", label: "Validade" },
   ],
+  cnh: [
+    { key: "nome", label: "Nome" },
+    { key: "cpf", label: "CPF" },
+    { key: "numeroRegistro", label: "Nº de registro" },
+    { key: "categoria", label: "Categoria" },
+    { key: "validade", label: "Validade" },
+    { key: "primeiraHabilitacao", label: "1ª habilitação" },
+    { key: "orgaoEmissor", label: "Órgão emissor" },
+  ],
   company: [
     { key: "cnpj", label: "CNPJ" },
     { key: "razaoSocial", label: "Razão social" },

@@ -39,6 +39,7 @@ import { fieldsForCategory } from "@shared/documentFields";
 
 const categoryLabels: Record<string, string> = {
   personal: "Pessoal",
+  cnh: "CNH",
   property: "Imóvel",
   vehicle: "Veículo",
   company: "Empresa",
@@ -52,6 +53,7 @@ const categoryLabels: Record<string, string> = {
 
 const categoryColors: Record<string, string> = {
   personal: "bg-blue-500/10 text-blue-400",
+  cnh: "bg-teal-500/10 text-teal-400",
   property: "bg-emerald-500/10 text-emerald-400",
   vehicle: "bg-amber-500/10 text-amber-400",
   company: "bg-purple-500/10 text-purple-400",
