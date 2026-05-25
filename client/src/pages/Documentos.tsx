@@ -151,6 +151,26 @@ export default function Documentos() {
   };
 
   const lookupCnpjMutation = trpc.documents.lookupCnpj.useMutation();
+  const lookupCepMutation = trpc.documents.lookupCep.useMutation();
+
+  const handleLookupCep = async () => {
+    const digits = (metaForm.cep ?? "").replace(/\D/g, "");
+    if (digits.length !== 8) {
+      toast.error("Informe um CEP com 8 dígitos");
+      return;
+    }
+    try {
+      const res = await lookupCepMutation.mutateAsync({ cep: digits });
+      if (Object.keys(res.fields).length > 0) {
+        setMetaForm((prev) => ({ ...prev, ...res.fields }));
+        toast.success("Endereço carregado");
+      } else {
+        toast.error("Nenhum endereço para este CEP");
+      }
+    } catch (err: any) {
+      toast.error(err?.message ?? "Falha na consulta de CEP");
+    }
+  };
 
   const handleLookupCnpj = async () => {
     const digits = (metaForm.cnpj ?? "").replace(/\D/g, "");
@@ -373,6 +393,19 @@ export default function Documentos() {
                     >
                       {lookupCnpjMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
                       Consultar CNPJ na Receita
+                    </Button>
+                  )}
+                  {form.category === "property" && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={handleLookupCep}
+                      disabled={lookupCepMutation.isPending}
+                    >
+                      {lookupCepMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                      Buscar endereço por CEP
                     </Button>
                   )}
                   <div className="grid grid-cols-2 gap-3">

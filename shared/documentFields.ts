@@ -15,9 +15,10 @@ export const CATEGORY_FIELDS: Record<string, DocField[]> = {
     { key: "proprietario", label: "Proprietário" },
   ],
   property: [
+    { key: "cep", label: "CEP" },
+    { key: "endereco", label: "Endereço" },
     { key: "matricula", label: "Matrícula" },
     { key: "inscricaoMunicipal", label: "Inscrição municipal" },
-    { key: "endereco", label: "Endereço" },
     { key: "area", label: "Área (m²)" },
     { key: "proprietario", label: "Proprietário" },
   ],

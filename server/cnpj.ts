@@ -1,10 +1,7 @@
 /** Look up public company data by CNPJ via BrasilAPI (no auth required). */
+import { ExternalLookupError, fetchLookupJson, onlyDigits } from "./lookup";
 
 export type CnpjLookup = Record<string, string>;
-
-function onlyDigits(s: string): string {
-  return s.replace(/\D/g, "");
-}
 
 export function formatCnpj(digits: string): string {
   const d = onlyDigits(digits);
@@ -58,37 +55,14 @@ export function mapCnpjResponse(d: any): CnpjLookup {
   return out;
 }
 
-export class CnpjLookupError extends Error {
-  constructor(message: string, readonly notFound = false) {
-    super(message);
-  }
-}
-
 export async function lookupCnpj(rawCnpj: string): Promise<CnpjLookup> {
   const cnpj = onlyDigits(rawCnpj);
   if (cnpj.length !== 14) {
-    throw new CnpjLookupError("CNPJ inválido (precisa de 14 dígitos).");
+    throw new ExternalLookupError("CNPJ inválido (precisa de 14 dígitos).");
   }
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10_000);
-  try {
-    const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, {
-      signal: controller.signal,
-      headers: { Accept: "application/json" },
-    });
-    if (res.status === 404) {
-      throw new CnpjLookupError("CNPJ não encontrado na base da Receita.", true);
-    }
-    if (!res.ok) {
-      throw new CnpjLookupError("Serviço de consulta indisponível no momento.");
-    }
-    return mapCnpjResponse(await res.json());
-  } catch (err) {
-    if (err instanceof CnpjLookupError) throw err;
-    // Network blocked/timeout/etc. — keep the message actionable.
-    throw new CnpjLookupError("Não foi possível consultar o CNPJ (sem acesso ao serviço).");
-  } finally {
-    clearTimeout(timer);
-  }
+  const data = await fetchLookupJson(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, {
+    notFound: "CNPJ não encontrado na base da Receita.",
+    unavailable: "Não foi possível consultar o CNPJ (serviço indisponível).",
+  });
+  return mapCnpjResponse(data);
 }

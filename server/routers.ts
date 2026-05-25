@@ -16,8 +16,10 @@ import {
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router, writeProcedure } from "./_core/trpc";
 import * as db from "./db";
-import { CnpjLookupError, lookupCnpj } from "./cnpj";
+import { lookupCep } from "./cep";
+import { lookupCnpj } from "./cnpj";
 import { extractFields, extractText } from "./extract";
+import { ExternalLookupError } from "./lookup";
 import { storageDelete, storagePut, storageReadBuffer, storageReadStream, storageStat } from "./storage";
 
 // ---- Minimal in-memory rate limiter (per key) for auth endpoints ----
@@ -441,8 +443,19 @@ export const appRouter = router({
         return { fields: await lookupCnpj(input.cnpj) };
       } catch (err) {
         throw new TRPCError({
-          code: err instanceof CnpjLookupError && err.notFound ? "NOT_FOUND" : "BAD_REQUEST",
+          code: err instanceof ExternalLookupError && err.notFound ? "NOT_FOUND" : "BAD_REQUEST",
           message: err instanceof Error ? err.message : "Falha na consulta de CNPJ.",
+        });
+      }
+    }),
+    /** Look up an address by CEP (public data via BrasilAPI). */
+    lookupCep: writeProcedure.input(z.object({ cep: z.string() })).mutation(async ({ input }) => {
+      try {
+        return { fields: await lookupCep(input.cep) };
+      } catch (err) {
+        throw new TRPCError({
+          code: err instanceof ExternalLookupError && err.notFound ? "NOT_FOUND" : "BAD_REQUEST",
+          message: err instanceof Error ? err.message : "Falha na consulta de CEP.",
         });
       }
     }),
