@@ -140,6 +140,7 @@ export const documents = mysqlTable("documents", {
   mimeType: varchar("mimeType", { length: 100 }),
   tags: text("tags"),
   expiresAt: date("expiresAt", { mode: "string" }),
+  metadata: text("metadata"),
   ...timestamps,
 }, (t) => [
   index("documents_userId_idx").on(t.userId),

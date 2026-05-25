@@ -5,7 +5,7 @@
 
 import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { ENV } from "./_core/env";
 
@@ -40,6 +40,10 @@ export async function storagePut(
 
 export function storageReadStream(key: string) {
   return createReadStream(resolveKey(key));
+}
+
+export async function storageReadBuffer(key: string): Promise<Buffer> {
+  return readFile(resolveKey(key));
 }
 
 export async function storageStat(key: string) {

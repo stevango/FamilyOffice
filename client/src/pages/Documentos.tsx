@@ -29,10 +29,13 @@ import {
   Upload,
   File,
   Filter,
+  Sparkles,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { downloadCsv } from "@/lib/export";
+import { fieldsForCategory } from "@shared/documentFields";
 
 const categoryLabels: Record<string, string> = {
   personal: "Pessoal",
@@ -69,6 +72,19 @@ function formatFileSize(bytes: number | null) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function parseMetadata(doc: { metadata?: string | null; category: string }): { label: string; value: string }[] {
+  if (!doc.metadata) return [];
+  try {
+    const obj = JSON.parse(doc.metadata) as Record<string, string>;
+    const fields = fieldsForCategory(doc.category);
+    return Object.entries(obj)
+      .filter(([, v]) => v)
+      .map(([k, v]) => ({ label: fields.find((f) => f.key === k)?.label ?? k, value: String(v) }));
+  } catch {
+    return [];
+  }
 }
 
 export default function Documentos() {
@@ -110,6 +126,33 @@ export default function Documentos() {
     expiresAt: "",
   });
   const [uploadedFile, setUploadedFile] = useState<{ key: string; url: string; fileName: string; fileSize: number; mimeType: string } | null>(null);
+  const [metaForm, setMetaForm] = useState<Record<string, string>>({});
+  const [analyzing, setAnalyzing] = useState(false);
+
+  const analyzeMutation = trpc.documents.analyze.useMutation({ onError: () => {} });
+
+  const runAnalyze = async (fileKey: string, mimeType: string, category: string) => {
+    if (fieldsForCategory(category).length === 0) return;
+    setAnalyzing(true);
+    try {
+      const res = await analyzeMutation.mutateAsync({ fileKey, mimeType, category });
+      if (Object.keys(res.fields).length > 0) {
+        // Keep any value the user already edited; fill the rest from extraction.
+        setMetaForm((prev) => ({ ...res.fields, ...prev }));
+        toast.success("Dados extraídos do documento");
+      }
+    } catch {
+      /* extraction is best-effort */
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const resetForm = () => {
+    setForm({ title: "", description: "", category: "other", tags: "", expiresAt: "" });
+    setUploadedFile(null);
+    setMetaForm({});
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -142,6 +185,7 @@ export default function Documentos() {
       });
       setForm({ ...form, title: form.title || file.name.replace(/\.[^/.]+$/, "") });
       toast.success("Arquivo enviado");
+      void runAnalyze(data.key, file.type, form.category);
     } catch (err) {
       toast.error("Erro ao enviar arquivo");
     } finally {
@@ -170,6 +214,7 @@ export default function Documentos() {
       toast.error("Selecione um arquivo e preencha o título");
       return;
     }
+    const metadata = Object.fromEntries(Object.entries(metaForm).filter(([, v]) => v && v.trim()));
     createMutation.mutate({
       title: form.title,
       description: form.description || undefined,
@@ -181,9 +226,9 @@ export default function Documentos() {
       mimeType: uploadedFile.mimeType,
       tags: form.tags || undefined,
       expiresAt: form.expiresAt || undefined,
+      metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
     });
-    setForm({ title: "", description: "", category: "other", tags: "", expiresAt: "" });
-    setUploadedFile(null);
+    resetForm();
   };
 
   return (
@@ -219,7 +264,7 @@ export default function Documentos() {
         <Button variant="outline" size="sm" className="gap-2" onClick={handleExport}>
           <Download className="h-4 w-4" /> Exportar
         </Button>
-        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setUploadedFile(null); } }}>
+        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { resetForm(); } }}>
           <DialogTrigger asChild>
             <Button size="sm" className="gap-2">
               <Plus className="h-4 w-4" /> Novo Documento
@@ -263,7 +308,13 @@ export default function Documentos() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Categoria</Label>
-                  <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v })}>
+                  <Select
+                    value={form.category}
+                    onValueChange={(v) => {
+                      setForm({ ...form, category: v });
+                      if (uploadedFile) void runAnalyze(uploadedFile.key, uploadedFile.mimeType, v);
+                    }}
+                  >
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {Object.entries(categoryLabels).map(([key, label]) => (
@@ -277,6 +328,31 @@ export default function Documentos() {
                   <Input type="date" value={form.expiresAt} onChange={(e) => setForm({ ...form, expiresAt: e.target.value })} />
                 </div>
               </div>
+
+              {fieldsForCategory(form.category).length > 0 && (
+                <div className="space-y-3 rounded-lg border border-border/60 p-3">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    {analyzing ? (
+                      <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Analisando documento...</>
+                    ) : (
+                      <><Sparkles className="h-3.5 w-3.5 text-primary" /> Dados do documento (preenchidos automaticamente quando possível)</>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {fieldsForCategory(form.category).map((f) => (
+                      <div key={f.key} className="space-y-1">
+                        <Label className="text-xs">{f.label}</Label>
+                        <Input
+                          value={metaForm[f.key] ?? ""}
+                          onChange={(e) => setMetaForm({ ...metaForm, [f.key]: e.target.value })}
+                          className="h-9"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label>Tags (separadas por vírgula)</Label>
                 <Input value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} placeholder="Ex: CNH, pessoal, 2024" />
@@ -317,6 +393,15 @@ export default function Documentos() {
                           </>
                         )}
                       </div>
+                      {parseMetadata(doc).length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                          {parseMetadata(doc).map((m, i) => (
+                            <span key={i} className="text-[10px] text-muted-foreground rounded bg-secondary/60 px-1.5 py-0.5">
+                              <span className="text-muted-foreground/70">{m.label}:</span> {m.value}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">

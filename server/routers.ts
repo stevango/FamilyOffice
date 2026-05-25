@@ -16,7 +16,8 @@ import {
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router, writeProcedure } from "./_core/trpc";
 import * as db from "./db";
-import { storageDelete, storagePut, storageReadStream, storageStat } from "./storage";
+import { extractFields, extractText } from "./extract";
+import { storageDelete, storagePut, storageReadBuffer, storageReadStream, storageStat } from "./storage";
 
 // ---- Minimal in-memory rate limiter (per key) for auth endpoints ----
 const attempts = new Map<string, { count: number; resetAt: number }>();
@@ -418,6 +419,21 @@ export const appRouter = router({
       search: z.string().optional(),
       category: z.string().optional(),
     }).optional()).query(async ({ ctx, input }) => db.getDocuments(ctx.user.householdId, input?.search, input?.category)),
+    /** Best-effort local extraction of category fields from an uploaded file. */
+    analyze: writeProcedure.input(z.object({
+      fileKey: z.string(),
+      mimeType: z.string().optional(),
+      category: z.string(),
+    })).mutation(async ({ ctx, input }) => {
+      // The just-uploaded file is stored under the requester's user id.
+      if (!input.fileKey.startsWith(`${ctx.user.id}/`)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Arquivo inválido." });
+      }
+      const buffer = await storageReadBuffer(input.fileKey).catch(() => null);
+      if (!buffer) return { fields: {} as Record<string, string>, hasText: false };
+      const text = await extractText(buffer, input.mimeType);
+      return { fields: extractFields(text, input.category), hasText: text.length > 0 };
+    }),
     create: writeProcedure.input(z.object({
       title: z.string().min(1),
       description: z.string().optional(),
@@ -429,7 +445,16 @@ export const appRouter = router({
       mimeType: z.string().optional(),
       tags: z.string().optional(),
       expiresAt: z.string().optional(),
-    })).mutation(async ({ ctx, input }) => db.createDocument({ ...input, userId: ctx.user.id, expiresAt: input.expiresAt || null })),
+      metadata: z.record(z.string(), z.string()).optional(),
+    })).mutation(async ({ ctx, input }) => {
+      const { metadata, ...rest } = input;
+      return db.createDocument({
+        ...rest,
+        userId: ctx.user.id,
+        expiresAt: input.expiresAt || null,
+        metadata: metadata && Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null,
+      });
+    }),
     update: writeProcedure.input(z.object({
       id: z.number(),
       title: z.string().min(1).optional(),
@@ -437,9 +462,13 @@ export const appRouter = router({
       category: z.enum(["personal", "property", "vehicle", "company", "legal", "tax", "insurance", "contract", "certificate", "other"]).optional(),
       tags: z.string().optional(),
       expiresAt: z.string().optional(),
+      metadata: z.record(z.string(), z.string()).optional(),
     })).mutation(async ({ ctx, input }) => {
-      const { id, ...data } = input;
-      await db.updateDocument(id, ctx.user.householdId, data as any);
+      const { id, metadata, ...data } = input;
+      await db.updateDocument(id, ctx.user.householdId, {
+        ...data,
+        ...(metadata ? { metadata: JSON.stringify(metadata) } : {}),
+      } as any);
       return { success: true };
     }),
     delete: writeProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
