@@ -19,8 +19,9 @@ import { adminProcedure, protectedProcedure, publicProcedure, router, writeProce
 import * as db from "./db";
 import { lookupCep } from "./cep";
 import { lookupCnpj } from "./cnpj";
-import { encryptSecret, secretHint } from "./crypto";
+import { decryptSecret, encryptSecret, secretHint } from "./crypto";
 import { extractFields, extractText } from "./extract";
+import { IntegrationPendingError, syncJusbrasil } from "./jusbrasil";
 import { ExternalLookupError } from "./lookup";
 import { storageDelete, storagePut, storageReadBuffer, storageReadStream, storageStat } from "./storage";
 
@@ -630,6 +631,28 @@ export const appRouter = router({
         lastError: null,
       });
       return { success: true };
+    }),
+    /** Run a sync for a configured provider, importing data into its module. */
+    sync: adminProcedure.input(z.object({ provider: z.enum(INTEGRATION_IDS) })).mutation(async ({ ctx, input }) => {
+      const row = await db.getIntegration(ctx.user.householdId, input.provider);
+      if (!row?.credentials) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configure as credenciais antes de sincronizar." });
+      }
+      const apiKey = decryptSecret(row.credentials);
+      try {
+        const { imported } = await syncJusbrasil({ apiKey, householdId: ctx.user.householdId, userId: ctx.user.id });
+        await db.upsertIntegration(ctx.user.householdId, input.provider, {
+          status: "connected", lastSyncAt: new Date(), lastError: null,
+        });
+        return { imported };
+      } catch (err) {
+        const pending = err instanceof IntegrationPendingError;
+        const message = err instanceof Error ? err.message : "Falha na sincronização.";
+        await db.upsertIntegration(ctx.user.householdId, input.provider, {
+          status: pending ? "disconnected" : "error", lastError: message,
+        });
+        throw new TRPCError({ code: pending ? "NOT_IMPLEMENTED" : "BAD_REQUEST", message });
+      }
     }),
   }),
 });

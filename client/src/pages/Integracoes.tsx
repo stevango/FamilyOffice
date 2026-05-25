@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader2, Plug, ShieldAlert, Save, Unplug } from "lucide-react";
+import { Loader2, Plug, ShieldAlert, Save, Unplug, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -30,6 +30,10 @@ export default function Integracoes() {
   });
   const disconnectMutation = trpc.integrations.disconnect.useMutation({
     onSuccess: () => { utils.integrations.list.invalidate(); toast.success("Integração desconectada"); },
+  });
+  const syncMutation = trpc.integrations.sync.useMutation({
+    onSuccess: (res) => { utils.integrations.list.invalidate(); toast.success(`Sincronizado: ${res.imported} registro(s)`); },
+    onError: (err) => { utils.integrations.list.invalidate(); toast.message(err.message); },
   });
 
   const saveKey = async (provider: string) => {
@@ -128,6 +132,26 @@ export default function Integracoes() {
                       )}
                     </div>
                   </div>
+
+                  {it.configured && (
+                    <div className="flex items-center justify-between gap-2 pt-1">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="gap-2"
+                        onClick={() => syncMutation.mutate({ provider: it.id as any })}
+                        disabled={syncMutation.isPending}
+                      >
+                        {syncMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                        Sincronizar agora
+                      </Button>
+                      {it.lastSyncAt && (
+                        <span className="text-xs text-muted-foreground">
+                          Última sincronização: {new Date(it.lastSyncAt).toLocaleString("pt-BR")}
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   {it.status === "error" && it.lastError && (
                     <p className="text-xs text-red-400">{it.lastError}</p>
