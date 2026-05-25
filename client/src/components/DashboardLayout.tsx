@@ -31,6 +31,7 @@ import {
   Building2,
   Scale,
   Shield,
+  Plug,
   Users,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
@@ -44,6 +45,7 @@ const menuItems = [
   { icon: Building2, label: "Patrimônio", path: "/patrimonio" },
   { icon: Scale, label: "Jurídico", path: "/juridico" },
   { icon: Users, label: "Família", path: "/familia" },
+  { icon: Plug, label: "Integrações", path: "/integracoes", adminOnly: true },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -98,6 +100,7 @@ function DashboardLayoutContent({
   const sidebarRef = useRef<HTMLDivElement>(null);
   const activeMenuItem = menuItems.find(item => item.path === location);
   const isMobile = useIsMobile();
+  const visibleItems = menuItems.filter(item => !item.adminOnly || user?.role === "admin");
 
   useEffect(() => {
     if (isCollapsed) {
@@ -164,7 +167,7 @@ function DashboardLayoutContent({
 
           <SidebarContent className="gap-0">
             <SidebarMenu className="px-2 py-1">
-              {menuItems.map(item => {
+              {visibleItems.map(item => {
                 const isActive = location === item.path;
                 return (
                   <SidebarMenuItem key={item.path}>

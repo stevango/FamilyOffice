@@ -9,6 +9,7 @@ import {
   cards, InsertCard,
   documents, InsertDocument,
   households,
+  integrations, InsertIntegration,
   invites, InsertInvite,
   legalCases, InsertLegalCase,
   transactions, InsertTransaction,
@@ -342,6 +343,34 @@ export async function updateLegalCase(id: number, householdId: number, data: Par
 
 export async function deleteLegalCase(id: number, householdId: number) {
   await getDb().delete(legalCases).where(and(eq(legalCases.id, id), inArray(legalCases.userId, memberIds(householdId))));
+}
+
+// ============ INTEGRATIONS ============
+
+export async function getIntegrations(householdId: number) {
+  return getDb().select().from(integrations).where(eq(integrations.householdId, householdId));
+}
+
+export async function getIntegration(householdId: number, provider: InsertIntegration["provider"]) {
+  const rows = await getDb().select().from(integrations)
+    .where(and(eq(integrations.householdId, householdId), eq(integrations.provider, provider)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** Insert or update the integration row for (household, provider). */
+export async function upsertIntegration(
+  householdId: number,
+  provider: InsertIntegration["provider"],
+  data: Partial<InsertIntegration>,
+) {
+  const existing = await getIntegration(householdId, provider);
+  if (existing) {
+    await getDb().update(integrations).set(data)
+      .where(and(eq(integrations.householdId, householdId), eq(integrations.provider, provider)));
+  } else {
+    await getDb().insert(integrations).values({ householdId, provider, ...data });
+  }
 }
 
 // ============ ALERTS ============

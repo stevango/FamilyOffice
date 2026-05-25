@@ -23,6 +23,11 @@ export const ENV = {
   // Auth
   jwtSecret: required("JWT_SECRET", process.env.JWT_SECRET ?? "dev-insecure-secret-change-me"),
 
+  // Key for encrypting stored integration credentials at rest. Falls back to
+  // the JWT secret so it works out of the box; set a dedicated value to make
+  // credential storage independent of session-secret rotation.
+  encryptionKey: process.env.ENCRYPTION_KEY ?? process.env.JWT_SECRET ?? "dev-insecure-secret-change-me",
+
   // Uploads
   maxUploadBytes: parseInt(process.env.MAX_UPLOAD_BYTES ?? String(16 * 1024 * 1024), 10),
 };

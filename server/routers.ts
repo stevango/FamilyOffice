@@ -1,4 +1,5 @@
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { INTEGRATIONS, INTEGRATION_IDS } from "@shared/integrations";
 import { TRPCError } from "@trpc/server";
 import type { Application, Request, Response } from "express";
 import express from "express";
@@ -18,6 +19,7 @@ import { adminProcedure, protectedProcedure, publicProcedure, router, writeProce
 import * as db from "./db";
 import { lookupCep } from "./cep";
 import { lookupCnpj } from "./cnpj";
+import { encryptSecret, secretHint } from "./crypto";
 import { extractFields, extractText } from "./extract";
 import { ExternalLookupError } from "./lookup";
 import { storageDelete, storagePut, storageReadBuffer, storageReadStream, storageStat } from "./storage";
@@ -578,6 +580,55 @@ export const appRouter = router({
     }),
     delete: writeProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
       await db.deleteLegalCase(input.id, ctx.user.householdId);
+      return { success: true };
+    }),
+  }),
+
+  // ============ INTEGRATIONS (partner APIs) ============
+  integrations: router({
+    /** Catalog merged with the household's stored config (never returns secrets). */
+    list: adminProcedure.query(async ({ ctx }) => {
+      const rows = await db.getIntegrations(ctx.user.householdId);
+      return INTEGRATIONS.map((meta) => {
+        const row = rows.find((r) => r.provider === meta.id);
+        return {
+          ...meta,
+          enabled: row ? row.enabled === 1 : false,
+          configured: !!row?.credentials,
+          credentialHint: row?.credentialHint ?? null,
+          status: row?.status ?? "disconnected",
+          lastSyncAt: row?.lastSyncAt ?? null,
+          lastError: row?.lastError ?? null,
+        };
+      });
+    }),
+    /** Save credentials and/or the enabled flag for a provider. */
+    save: adminProcedure.input(z.object({
+      provider: z.enum(INTEGRATION_IDS),
+      apiKey: z.string().trim().optional(),
+      enabled: z.boolean().optional(),
+    })).mutation(async ({ ctx, input }) => {
+      const data: Record<string, unknown> = {};
+      if (input.apiKey) {
+        data.credentials = encryptSecret(input.apiKey);
+        data.credentialHint = secretHint(input.apiKey);
+        // New credentials must be re-validated before we trust them.
+        data.status = "disconnected";
+        data.lastError = null;
+      }
+      if (input.enabled !== undefined) data.enabled = input.enabled ? 1 : 0;
+      await db.upsertIntegration(ctx.user.householdId, input.provider, data);
+      return { success: true };
+    }),
+    /** Remove stored credentials and disable the provider. */
+    disconnect: adminProcedure.input(z.object({ provider: z.enum(INTEGRATION_IDS) })).mutation(async ({ ctx, input }) => {
+      await db.upsertIntegration(ctx.user.householdId, input.provider, {
+        credentials: null,
+        credentialHint: null,
+        enabled: 0,
+        status: "disconnected",
+        lastError: null,
+      });
       return { success: true };
     }),
   }),

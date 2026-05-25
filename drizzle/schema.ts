@@ -193,3 +193,24 @@ export const legalCases = mysqlTable("legal_cases", {
 
 export type LegalCase = typeof legalCases.$inferSelect;
 export type InsertLegalCase = typeof legalCases.$inferInsert;
+
+/**
+ * Integrações com APIs de parceiros (ex.: Jusbrasil). Uma linha por
+ * (household, provedor). Credenciais ficam cifradas em `credentials`.
+ */
+export const integrations = mysqlTable("integrations", {
+  id: int("id").autoincrement().primaryKey(),
+  householdId: int("householdId").notNull(),
+  provider: mysqlEnum("provider", ["jusbrasil"]).notNull(),
+  enabled: int("enabled").default(0).notNull(),
+  credentials: text("credentials"),
+  credentialHint: varchar("credentialHint", { length: 32 }),
+  config: text("config"),
+  status: mysqlEnum("status", ["disconnected", "connected", "error"]).default("disconnected").notNull(),
+  lastSyncAt: timestamp("lastSyncAt"),
+  lastError: text("lastError"),
+  ...timestamps,
+}, (t) => [index("integrations_household_provider_idx").on(t.householdId, t.provider)]);
+
+export type Integration = typeof integrations.$inferSelect;
+export type InsertIntegration = typeof integrations.$inferInsert;
