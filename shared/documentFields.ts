@@ -40,6 +40,13 @@ export const CATEGORY_FIELDS: Record<string, DocField[]> = {
   company: [
     { key: "cnpj", label: "CNPJ" },
     { key: "razaoSocial", label: "Razão social" },
+    { key: "nomeFantasia", label: "Nome fantasia" },
+    { key: "dataAbertura", label: "Data de abertura" },
+    { key: "situacao", label: "Situação cadastral" },
+    { key: "naturezaJuridica", label: "Natureza jurídica" },
+    { key: "cnae", label: "CNAE principal" },
+    { key: "porte", label: "Porte" },
+    { key: "endereco", label: "Endereço" },
     { key: "inscricaoEstadual", label: "Inscrição estadual" },
   ],
   tax: [

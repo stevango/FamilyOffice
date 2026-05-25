@@ -16,6 +16,7 @@ import {
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router, writeProcedure } from "./_core/trpc";
 import * as db from "./db";
+import { CnpjLookupError, lookupCnpj } from "./cnpj";
 import { extractFields, extractText } from "./extract";
 import { storageDelete, storagePut, storageReadBuffer, storageReadStream, storageStat } from "./storage";
 
@@ -433,6 +434,17 @@ export const appRouter = router({
       if (!buffer) return { fields: {} as Record<string, string>, hasText: false };
       const text = await extractText(buffer, input.mimeType);
       return { fields: extractFields(text, input.category), hasText: text.length > 0 };
+    }),
+    /** Look up official company data by CNPJ (public Receita data via BrasilAPI). */
+    lookupCnpj: writeProcedure.input(z.object({ cnpj: z.string() })).mutation(async ({ input }) => {
+      try {
+        return { fields: await lookupCnpj(input.cnpj) };
+      } catch (err) {
+        throw new TRPCError({
+          code: err instanceof CnpjLookupError && err.notFound ? "NOT_FOUND" : "BAD_REQUEST",
+          message: err instanceof Error ? err.message : "Falha na consulta de CNPJ.",
+        });
+      }
     }),
     create: writeProcedure.input(z.object({
       title: z.string().min(1),

@@ -56,6 +56,19 @@ describe("extractFields", () => {
     expect(extractFields("Razao Social X CNPJ 12.345.678/0001-90", "company").cnpj).toBe("12.345.678/0001-90");
   });
 
+  it("extracts cartão CNPJ fields from Receita layout", () => {
+    const text =
+      "COMPROVANTE DE INSCRICAO E DE SITUACAO CADASTRAL NUMERO DE INSCRICAO 19.131.243/0001-97 MATRIZ " +
+      "DATA DE ABERTURA 03/10/2013 NOME EMPRESARIAL OPEN KNOWLEDGE BRASIL " +
+      "NOME DE FANTASIA REDE PELO CONHECIMENTO LIVRE SITUACAO CADASTRAL ATIVA";
+    const f = extractFields(text, "company");
+    expect(f.cnpj).toBe("19.131.243/0001-97");
+    expect(f.dataAbertura).toBe("03/10/2013");
+    expect(f.razaoSocial).toContain("OPEN KNOWLEDGE BRASIL");
+    expect(f.nomeFantasia).toContain("REDE PELO CONHECIMENTO LIVRE");
+    expect(f.situacao).toBe("ATIVA");
+  });
+
   it("extracts exercicio and document number for tax/cnpj", () => {
     const f = extractFields("IPTU EXERCICIO 2025 CNPJ 12.345.678/0001-90", "tax");
     expect(f.exercicio).toBe("2025");

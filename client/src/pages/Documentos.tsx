@@ -150,6 +150,28 @@ export default function Documentos() {
     }
   };
 
+  const lookupCnpjMutation = trpc.documents.lookupCnpj.useMutation();
+
+  const handleLookupCnpj = async () => {
+    const digits = (metaForm.cnpj ?? "").replace(/\D/g, "");
+    if (digits.length !== 14) {
+      toast.error("Informe um CNPJ com 14 dígitos");
+      return;
+    }
+    try {
+      const res = await lookupCnpjMutation.mutateAsync({ cnpj: digits });
+      if (Object.keys(res.fields).length > 0) {
+        // Official data overrides locally-read values.
+        setMetaForm((prev) => ({ ...prev, ...res.fields }));
+        toast.success("Dados da Receita carregados");
+      } else {
+        toast.error("Nenhum dado retornado para este CNPJ");
+      }
+    } catch (err: any) {
+      toast.error(err?.message ?? "Falha na consulta de CNPJ");
+    }
+  };
+
   const resetForm = () => {
     setForm({ title: "", description: "", category: "other", tags: "", expiresAt: "" });
     setUploadedFile(null);
@@ -340,6 +362,19 @@ export default function Documentos() {
                       <><Sparkles className="h-3.5 w-3.5 text-primary" /> Dados do documento (preenchidos automaticamente quando possível)</>
                     )}
                   </div>
+                  {form.category === "company" && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={handleLookupCnpj}
+                      disabled={lookupCnpjMutation.isPending}
+                    >
+                      {lookupCnpjMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                      Consultar CNPJ na Receita
+                    </Button>
+                  )}
                   <div className="grid grid-cols-2 gap-3">
                     {fieldsForCategory(form.category).map((f) => (
                       <div key={f.key} className="space-y-1">

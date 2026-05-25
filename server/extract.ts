@@ -67,6 +67,21 @@ function detectInscricaoEstadual(text: string): string | undefined {
   return text.match(/INSCRI[ÇC][ÃA]O\s+ESTADUAL[:\s]*([\d.\/-]{6,20})/i)?.[1];
 }
 
+/** "Nome de fantasia" / "Título do estabelecimento" on the cartão CNPJ. */
+function detectNomeFantasia(text: string): string | undefined {
+  return text.match(/NOME\s+(?:DE\s+)?FANTASIA[)\s:.*-]*([A-ZÀ-Ú0-9][^\n;]{1,60})/i)?.[1]?.trim();
+}
+
+function detectDataAbertura(text: string): string | undefined {
+  return text.match(/DATA\s+DE\s+ABERTURA[:\s]*(\d{2}\/\d{2}\/\d{4})/i)?.[1];
+}
+
+/** Cadastral status on the cartão CNPJ. Constrained to real statuses because
+ *  the document title also contains the words "situação cadastral". */
+function detectSituacaoCadastral(text: string): string | undefined {
+  return text.match(/SITUA[ÇC][ÃA]O\s+CADASTRAL[:\s]*(ATIVA|BAIXADA|INAPTA|SUSPENSA|NULA)/i)?.[1]?.toUpperCase();
+}
+
 function detectMatricula(text: string): string | undefined {
   return text.match(/MATR[IÍ]CULA[:\s]*(?:N[º°.]?\s*)?(\d{2,})/i)?.[1];
 }
@@ -120,6 +135,9 @@ export function extractFields(text: string, category: string): Record<string, st
     case "company":
       set("cnpj", detectCnpj(t));
       set("razaoSocial", detectRazaoSocial(t));
+      set("nomeFantasia", detectNomeFantasia(t));
+      set("dataAbertura", detectDataAbertura(t));
+      set("situacao", detectSituacaoCadastral(t));
       set("inscricaoEstadual", detectInscricaoEstadual(t));
       break;
     case "property":
