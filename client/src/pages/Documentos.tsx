@@ -38,6 +38,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   ChevronDown,
+  Eye,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -418,6 +419,7 @@ export default function Documentos() {
     resetForm();
   };
 
+  const [viewing, setViewing] = useState<any | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const toggleCat = (cat: string) =>
     setCollapsed((prev) => {
@@ -472,15 +474,18 @@ export default function Documentos() {
         </div>
       </div>
       <div className="flex items-center gap-2 shrink-0">
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(doc)}>
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setViewing(doc)} title="Visualizar">
+          <Eye className="h-3.5 w-3.5" />
+        </Button>
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(doc)} title="Editar">
           <Pencil className="h-3.5 w-3.5" />
         </Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+        <Button variant="ghost" size="icon" className="h-8 w-8" asChild title="Baixar">
           <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer">
             <Download className="h-3.5 w-3.5" />
           </a>
         </Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => deleteMutation.mutate({ id: doc.id })}>
+        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => deleteMutation.mutate({ id: doc.id })} title="Excluir">
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
       </div>
@@ -745,6 +750,36 @@ export default function Documentos() {
               {updateMutation.isPending ? "Salvando..." : "Salvar alterações"}
             </Button>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Document viewer */}
+      <Dialog open={viewing != null} onOpenChange={(v) => { if (!v) setViewing(null); }}>
+        <DialogContent className="bg-card border-border sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle className="truncate pr-8">{viewing?.title}</DialogTitle>
+          </DialogHeader>
+          {viewing && (
+            <div className="h-[70vh] w-full overflow-hidden rounded-md border border-border bg-background">
+              {viewing.mimeType?.startsWith("image/") ? (
+                <img src={viewing.fileUrl} alt={viewing.title} className="h-full w-full object-contain" />
+              ) : viewing.mimeType?.includes("pdf") ? (
+                <iframe src={viewing.fileUrl} title={viewing.title} className="h-full w-full border-0" />
+              ) : (
+                <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground p-6 text-center">
+                  <FileText className="h-10 w-10" />
+                  <p className="text-sm">Pré-visualização não disponível para este tipo de arquivo.</p>
+                </div>
+              )}
+            </div>
+          )}
+          <div className="flex justify-end">
+            <Button variant="outline" size="sm" className="gap-2" asChild>
+              <a href={viewing?.fileUrl} target="_blank" rel="noopener noreferrer">
+                <Download className="h-4 w-4" /> Abrir em nova aba
+              </a>
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
