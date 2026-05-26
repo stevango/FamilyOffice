@@ -172,7 +172,7 @@ function MetaFieldsBlock({
   );
   if (fieldsForCategory(category).length === 0) return null;
   return (
-    <div className="space-y-3 rounded-lg border border-border/60 p-3">
+    <div className="space-y-3 rounded-lg border border-border/60 p-4">
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
         {analyzing ? (
           <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Analisando documento...</>
@@ -198,10 +198,10 @@ function MetaFieldsBlock({
           Buscar endereço por CEP
         </Button>
       )}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3">
         {fields.map((f) => (
-          <div key={f.key} className="space-y-1">
-            <Label className="text-xs">{f.label}</Label>
+          <div key={f.key} className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">{f.label}</Label>
             {f.options ? (
               <Select value={meta[f.key] ?? ""} onValueChange={(v) => setMeta((prev) => ({ ...prev, [f.key]: v }))}>
                 <SelectTrigger className="h-9"><SelectValue placeholder="Selecione" /></SelectTrigger>
@@ -802,7 +802,7 @@ export default function Documentos() {
               <Plus className="h-4 w-4" /> Novo Documento
             </Button>
           </DialogTrigger>
-          <DialogContent className="bg-card border-border max-w-lg">
+          <DialogContent className="bg-card border-border sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle>Adicionar Documento</DialogTitle>
             </DialogHeader>
@@ -969,7 +969,7 @@ export default function Documentos() {
 
       {/* Edit Dialog */}
       <Dialog open={editingId != null} onOpenChange={(v) => { if (!v) setEditingId(null); }}>
-        <DialogContent className="bg-card border-border max-w-lg">
+        <DialogContent className="bg-card border-border sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Editar Documento</DialogTitle>
           </DialogHeader>
