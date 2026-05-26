@@ -163,6 +163,13 @@ export function extractFields(text: string, category: string): Record<string, st
     case "legal":
       set("numeroProcesso", t.match(/\b(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})\b/)?.[1]);
       break;
+    case "finance":
+      set("valor", detectValor(t));
+      set("data", detectFirstDate(t));
+      break;
+    case "studies":
+      set("conclusao", detectFirstDate(t));
+      break;
     default:
       break;
   }

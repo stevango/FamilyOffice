@@ -31,6 +31,7 @@ import {
   Filter,
   Sparkles,
   Loader2,
+  User,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -48,6 +49,8 @@ const categoryLabels: Record<string, string> = {
   insurance: "Seguro",
   contract: "Contrato",
   certificate: "Certidão",
+  finance: "Finanças",
+  studies: "Estudos",
   other: "Outro",
 };
 
@@ -62,6 +65,8 @@ const categoryColors: Record<string, string> = {
   insurance: "bg-cyan-500/10 text-cyan-400",
   contract: "bg-indigo-500/10 text-indigo-400",
   certificate: "bg-pink-500/10 text-pink-400",
+  finance: "bg-green-500/10 text-green-400",
+  studies: "bg-violet-500/10 text-violet-400",
   other: "bg-gray-500/10 text-gray-400",
 };
 
@@ -454,6 +459,15 @@ export default function Documentos() {
                         <span className="text-xs text-muted-foreground">{formatDate(doc.createdAt)}</span>
                         <span className="text-xs text-muted-foreground">·</span>
                         <span className="text-xs text-muted-foreground">{formatFileSize(doc.fileSize)}</span>
+                        {(doc.ownerName || doc.ownerEmail) && (
+                          <>
+                            <span className="text-xs text-muted-foreground">·</span>
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <User className="h-3 w-3" />
+                              {doc.ownerName || doc.ownerEmail}
+                            </span>
+                          </>
+                        )}
                         {doc.tags && (
                           <>
                             <span className="text-xs text-muted-foreground">·</span>

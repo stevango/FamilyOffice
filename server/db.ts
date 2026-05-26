@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, like, or, sql } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, inArray, like, or, sql } from "drizzle-orm";
 import { drizzle, type MySql2Database } from "drizzle-orm/mysql2";
 import { migrate } from "drizzle-orm/mysql2/migrator";
 import mysql from "mysql2/promise";
@@ -251,7 +251,7 @@ export async function getMonthlyCashFlow(householdId: number, months = 6) {
 // ============ DOCUMENTS ============
 
 export async function getDocuments(householdId: number, search?: string, category?: string) {
-  const conditions = [inArray(documents.userId, memberIds(householdId))];
+  const conditions = [eq(users.householdId, householdId)];
   if (category) {
     conditions.push(eq(documents.category, category as any));
   }
@@ -263,7 +263,12 @@ export async function getDocuments(householdId: number, search?: string, categor
       )!
     );
   }
-  return getDb().select().from(documents).where(and(...conditions)).orderBy(desc(documents.createdAt));
+  return getDb()
+    .select({ ...getTableColumns(documents), ownerName: users.name, ownerEmail: users.email })
+    .from(documents)
+    .innerJoin(users, eq(users.id, documents.userId))
+    .where(and(...conditions))
+    .orderBy(desc(documents.createdAt));
 }
 
 export async function getDocumentByKey(householdId: number, fileKey: string) {

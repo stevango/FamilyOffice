@@ -131,7 +131,7 @@ export const documents = mysqlTable("documents", {
   description: text("description"),
   category: mysqlEnum("category", [
     "personal", "cnh", "property", "vehicle", "company", "legal",
-    "tax", "insurance", "contract", "certificate", "other",
+    "tax", "insurance", "contract", "certificate", "finance", "studies", "other",
   ]).default("other").notNull(),
   fileKey: varchar("fileKey", { length: 500 }).notNull(),
   fileUrl: varchar("fileUrl", { length: 1000 }).notNull(),

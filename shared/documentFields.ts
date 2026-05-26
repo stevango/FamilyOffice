@@ -73,6 +73,18 @@ export const CATEGORY_FIELDS: Record<string, DocField[]> = {
   legal: [
     { key: "numeroProcesso", label: "Número do processo" },
   ],
+  finance: [
+    { key: "instituicao", label: "Instituição" },
+    { key: "tipo", label: "Tipo" },
+    { key: "valor", label: "Valor" },
+    { key: "data", label: "Data" },
+  ],
+  studies: [
+    { key: "instituicao", label: "Instituição" },
+    { key: "curso", label: "Curso" },
+    { key: "aluno", label: "Aluno" },
+    { key: "conclusao", label: "Conclusão" },
+  ],
   other: [],
 };
 
