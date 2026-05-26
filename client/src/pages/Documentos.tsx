@@ -121,15 +121,20 @@ function needsAccountant(doc: { aiSummary?: string | null }): boolean {
   try { return JSON.parse(doc.aiSummary)?.comunicarContador === true; } catch { return false; }
 }
 
-/** Estimated end date = adesão + N installments (months), as dd/mm/aaaa. */
+/** Estimated end date = adesão + N installments (months), as dd/mm/aaaa.
+ *  Accepts dd/mm/aaaa, dd-mm-aaaa or aaaa-mm-dd for the start date. */
 function computeEncerramento(dataAdesao?: string, parcelas?: string): string | null {
-  const m = (dataAdesao ?? "").match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  const s = (dataAdesao ?? "").trim();
+  let y: number | undefined, mo: number | undefined, d: number | undefined;
+  let m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (m) { d = +m[1]; mo = +m[2]; y = +m[3]; }
+  else { m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/); if (m) { y = +m[1]; mo = +m[2]; d = +m[3]; } }
   const n = parseInt((parcelas ?? "").replace(/\D/g, ""), 10);
-  if (!m || !n) return null;
-  const [, dd, mm, yyyy] = m;
-  const d = new Date(Date.UTC(Number(yyyy), Number(mm) - 1 + n, Number(dd)));
-  if (Number.isNaN(d.getTime())) return null;
-  return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()}`;
+  if (y == null || mo == null || d == null || !n) return null;
+  const dt = new Date(Date.UTC(y, mo - 1 + n, d));
+  if (Number.isNaN(dt.getTime())) return null;
+  const pad = (x: number) => String(x).padStart(2, "0");
+  return `${pad(dt.getUTCDate())}/${pad(dt.getUTCMonth() + 1)}/${dt.getUTCFullYear()}`;
 }
 
 /** For a consórcio doc, a "paid X/Y (NN%)" progress string, when known. */
@@ -216,10 +221,15 @@ function MetaFieldsBlock({
             {f.key === "dataEncerramento" && (
               <button
                 type="button"
-                onClick={() => setMeta((prev) => {
-                  const enc = computeEncerramento(prev.dataAdesao, prev.parcelas);
-                  return enc ? { ...prev, dataEncerramento: enc } : prev;
-                })}
+                onClick={() => {
+                  const enc = computeEncerramento(meta.dataAdesao, meta.parcelas);
+                  if (enc) {
+                    setMeta((prev) => ({ ...prev, dataEncerramento: enc }));
+                    toast.success(`Encerramento estimado: ${enc}`);
+                  } else {
+                    toast.error("Preencha a Data de adesão (dd/mm/aaaa) e as Parcelas (total)");
+                  }
+                }}
                 className="text-[10px] text-primary hover:underline"
               >
                 Recalcular a partir da adesão + parcelas
