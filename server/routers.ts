@@ -11,8 +11,10 @@ import {
   getUserFromRequest,
   hashPassword,
   signSession,
+  signShareToken,
   toPublicUser,
   verifyPassword,
+  verifyShareToken,
 } from "./_core/session";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router, writeProcedure } from "./_core/trpc";
@@ -156,6 +158,26 @@ export function registerFileRoutes(app: Application) {
     res.set("Content-Length", String(buffer.length));
     res.set("Cache-Control", "private, max-age=0, no-cache");
     res.set("Content-Disposition", `inline; filename="${encodeURIComponent(doc.fileName)}"`);
+    res.send(buffer);
+  });
+
+  // Public, signed, time-limited share link (no login) for email/WhatsApp.
+  app.get("/api/share/:token", async (req: Request, res: Response) => {
+    const payload = await verifyShareToken((req.params as Record<string, string>).token);
+    if (!payload) {
+      res.status(410).type("html").send(
+        `<!doctype html><html lang="pt-br"><body style="font-family:system-ui,sans-serif;background:#0a0a0a;color:#9a9a9a;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center"><p>Link de compartilhamento inválido ou expirado.</p></body></html>`,
+      );
+      return;
+    }
+    const buffer = await storageReadBuffer(payload.fileKey).catch(() => null);
+    if (!buffer) {
+      res.status(404).type("html").send("Arquivo não encontrado.");
+      return;
+    }
+    res.set("Content-Type", payload.mimeType || "application/octet-stream");
+    res.set("Content-Length", String(buffer.length));
+    res.set("Content-Disposition", `inline; filename="${encodeURIComponent(payload.fileName)}"`);
     res.send(buffer);
   });
 }
@@ -483,6 +505,17 @@ export const appRouter = router({
       if (!buffer) return { fields: {} as Record<string, string>, hasText: false };
       const text = await extractText(buffer, doc.mimeType ?? undefined);
       return { fields: extractFields(text, doc.category), hasText: text.length > 0 };
+    }),
+    /** Generate a signed, time-limited public link to share the file. */
+    shareLink: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+      const doc = await db.getDocumentById(ctx.user.householdId, input.id);
+      if (!doc) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado." });
+      const token = await signShareToken({
+        fileKey: doc.fileKey,
+        fileName: doc.fileName,
+        mimeType: doc.mimeType ?? "application/octet-stream",
+      });
+      return { token };
     }),
     /** Consultor IA: summarize a document and flag income-tax relevance (Claude). */
     summarize: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {

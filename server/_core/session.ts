@@ -39,6 +39,32 @@ export async function signSession(payload: SessionPayload, expiresInMs = ONE_YEA
     .sign(secretKey());
 }
 
+type SharePayload = { fileKey: string; fileName: string; mimeType: string };
+
+/** Sign a short-lived public link token for sharing a single file. */
+export async function signShareToken(payload: SharePayload, expiresInMs = 7 * 24 * 60 * 60 * 1000): Promise<string> {
+  const exp = Math.floor((Date.now() + expiresInMs) / 1000);
+  return new SignJWT({ kind: "share", fileKey: payload.fileKey, fileName: payload.fileName, mimeType: payload.mimeType })
+    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+    .setExpirationTime(exp)
+    .sign(secretKey());
+}
+
+export async function verifyShareToken(token: string | undefined | null): Promise<SharePayload | null> {
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, secretKey(), { algorithms: ["HS256"] });
+    if (payload.kind !== "share" || typeof payload.fileKey !== "string") return null;
+    return {
+      fileKey: payload.fileKey,
+      fileName: typeof payload.fileName === "string" ? payload.fileName : "documento",
+      mimeType: typeof payload.mimeType === "string" ? payload.mimeType : "application/octet-stream",
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function verifySession(token: string | undefined | null): Promise<SessionPayload | null> {
   if (!token) return null;
   try {

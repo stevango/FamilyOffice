@@ -39,7 +39,17 @@ import {
   CheckCircle2,
   ChevronLeft,
   Eye,
+  Share2,
+  MessageCircle,
+  Mail,
+  Link2,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { downloadCsv } from "@/lib/export";
@@ -490,6 +500,25 @@ export default function Documentos() {
     onSuccess: () => { utils.documents.list.invalidate(); toast.success("Arquivo reenviado"); },
   });
 
+  const shareLinkMutation = trpc.documents.shareLink.useMutation();
+
+  const shareDoc = async (doc: any, via: "whatsapp" | "email" | "copy") => {
+    try {
+      const { token } = await shareLinkMutation.mutateAsync({ id: doc.id });
+      const url = `${window.location.origin}/api/share/${token}`;
+      if (via === "whatsapp") {
+        window.open(`https://wa.me/?text=${encodeURIComponent(`${doc.title}: ${url}`)}`, "_blank", "noopener");
+      } else if (via === "email") {
+        window.location.href = `mailto:?subject=${encodeURIComponent(doc.title)}&body=${encodeURIComponent(`Segue o documento "${doc.title}":\n${url}\n\n(link válido por 7 dias)`)}`;
+      } else {
+        await navigator.clipboard.writeText(url);
+        toast.success("Link copiado (válido por 7 dias)");
+      }
+    } catch (err: any) {
+      toast.error(err?.message ?? "Falha ao gerar o link de compartilhamento");
+    }
+  };
+
   const startReplace = (id: number) => {
     setReplacingId(id);
     replaceInputRef.current?.click();
@@ -649,6 +678,26 @@ export default function Documentos() {
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setViewing(doc)} title="Visualizar">
           <Eye className="h-3.5 w-3.5" />
         </Button>
+        {doc.hasFile && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8" title="Compartilhar">
+                <Share2 className="h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => shareDoc(doc, "whatsapp")} className="cursor-pointer">
+                <MessageCircle className="mr-2 h-4 w-4" /> Enviar por WhatsApp
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => shareDoc(doc, "email")} className="cursor-pointer">
+                <Mail className="mr-2 h-4 w-4" /> Enviar por e-mail
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => shareDoc(doc, "copy")} className="cursor-pointer">
+                <Link2 className="mr-2 h-4 w-4" /> Copiar link
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(doc)} title="Editar">
           <Pencil className="h-3.5 w-3.5" />
         </Button>
