@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, type ComponentType } from "react";
 import { Route, Switch } from "wouter";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -11,15 +11,47 @@ import { DashboardLayoutSkeleton } from "./components/DashboardLayoutSkeleton";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Login from "./pages/Login";
 
+/**
+ * After a new deploy, code-split chunk filenames change; a tab still running
+ * the old build fails to fetch them ("Failed to fetch dynamically imported
+ * module"). Reload once (time-guarded against loops) to fetch the fresh build.
+ */
+function reloadOnceForStaleChunk(): boolean {
+  const KEY = "fo:lastChunkReload";
+  const last = Number(sessionStorage.getItem(KEY) || "0");
+  if (Date.now() - last > 10_000) {
+    sessionStorage.setItem(KEY, String(Date.now()));
+    window.location.reload();
+    return true;
+  }
+  return false;
+}
+
+function lazyWithReload<T extends ComponentType<any>>(factory: () => Promise<{ default: T }>) {
+  return lazy(async () => {
+    try {
+      return await factory();
+    } catch (err) {
+      // Block render until the reload navigates away; otherwise surface the error.
+      if (reloadOnceForStaleChunk()) return await new Promise<{ default: T }>(() => {});
+      throw err;
+    }
+  });
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("vite:preloadError", () => { reloadOnceForStaleChunk(); });
+}
+
 // Authenticated feature pages are code-split so the initial load stays small.
-const Home = lazy(() => import("./pages/Home"));
-const Financeiro = lazy(() => import("./pages/Financeiro"));
-const Documentos = lazy(() => import("./pages/Documentos"));
-const Patrimonio = lazy(() => import("./pages/Patrimonio"));
-const Juridico = lazy(() => import("./pages/Juridico"));
-const Familia = lazy(() => import("./pages/Familia"));
-const Assistente = lazy(() => import("./pages/Assistente"));
-const Integracoes = lazy(() => import("./pages/Integracoes"));
+const Home = lazyWithReload(() => import("./pages/Home"));
+const Financeiro = lazyWithReload(() => import("./pages/Financeiro"));
+const Documentos = lazyWithReload(() => import("./pages/Documentos"));
+const Patrimonio = lazyWithReload(() => import("./pages/Patrimonio"));
+const Juridico = lazyWithReload(() => import("./pages/Juridico"));
+const Familia = lazyWithReload(() => import("./pages/Familia"));
+const Assistente = lazyWithReload(() => import("./pages/Assistente"));
+const Integracoes = lazyWithReload(() => import("./pages/Integracoes"));
 
 function PageFallback() {
   return (
