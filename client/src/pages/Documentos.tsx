@@ -116,6 +116,47 @@ function parseMetadata(doc: { metadata?: string | null; category: string }): { l
   }
 }
 
+// ---- Input masks (CPF/CNPJ, telefone, data) ----
+const onlyDigits = (s: string) => s.replace(/\D/g, "");
+function maskCpf(v: string): string {
+  const d = onlyDigits(v).slice(0, 11);
+  if (d.length > 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+  if (d.length > 6) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
+  if (d.length > 3) return `${d.slice(0, 3)}.${d.slice(3)}`;
+  return d;
+}
+function maskCnpj(v: string): string {
+  const d = onlyDigits(v).slice(0, 14);
+  if (d.length > 12) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+  if (d.length > 8) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8)}`;
+  if (d.length > 5) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5)}`;
+  if (d.length > 2) return `${d.slice(0, 2)}.${d.slice(2)}`;
+  return d;
+}
+function maskPhone(v: string): string {
+  const d = onlyDigits(v).slice(0, 11);
+  if (d.length <= 2) return d;
+  if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+}
+function maskDate(v: string): string {
+  const d = onlyDigits(v).slice(0, 8);
+  if (d.length <= 2) return d;
+  if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`;
+  return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
+}
+/** Apply the right mask to a field's value, inferred from its key. */
+function maskValue(key: string, value: string): string {
+  const k = key.toLowerCase();
+  if (k === "cpfcnpj") return onlyDigits(value).length > 11 ? maskCnpj(value) : maskCpf(value);
+  if (k.endsWith("cnpj")) return maskCnpj(value);
+  if (k.endsWith("cpf")) return maskCpf(value);
+  if (k.includes("telefone") || k.includes("celular") || k.includes("fone")) return maskPhone(value);
+  if (k.startsWith("data") || k === "validade" || k === "vigencia" || k === "primeirahabilitacao") return maskDate(value);
+  return value;
+}
+
 /** Whether the saved AI summary flagged this document for the accountant (IR). */
 function needsAccountant(doc: { aiSummary?: string | null }): boolean {
   if (!doc.aiSummary) return false;
@@ -167,7 +208,7 @@ function MetaFieldsBlock({
   onAiFill?: () => void;
   aiPending?: boolean;
   aiAvailable?: boolean;
-  linkOptions?: Array<{ id: number; label: string }>;
+  linkOptions?: Array<{ id: number; label: string; tipo: string }>;
 }) {
   const fields = fieldsForCategory(category).filter(
     (f) => !f.showWhen || f.showWhen.every((c) => meta[c.field] === c.value),
@@ -205,11 +246,13 @@ function MetaFieldsBlock({
           <div key={f.key} className={f.multi ? "space-y-1.5 col-span-2" : "space-y-1.5"}>
             <Label className="text-xs text-muted-foreground">{f.label}</Label>
             {f.multi === "consorcio" ? (
-              (linkOptions ?? []).length === 0 ? (
-                <p className="text-xs text-muted-foreground">Nenhum consórcio cadastrado nos Documentos.</p>
-              ) : (
+              (() => {
+                const opts = (linkOptions ?? []).filter((o) => !f.multiTipos || f.multiTipos.includes(o.tipo));
+                return opts.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Nenhuma carta de consórcio do tipo correspondente cadastrada.</p>
+                ) : (
                 <div className="flex flex-wrap gap-1.5">
-                  {(linkOptions ?? []).map((opt) => {
+                  {opts.map((opt) => {
                     const active = (meta[f.key] ?? "").split(",").filter(Boolean).includes(String(opt.id));
                     return (
                       <button
@@ -227,7 +270,8 @@ function MetaFieldsBlock({
                     );
                   })}
                 </div>
-              )
+                );
+              })()
             ) : f.options ? (
               <Select value={meta[f.key] ?? ""} onValueChange={(v) => setMeta((prev) => ({ ...prev, [f.key]: v }))}>
                 <SelectTrigger className="h-9"><SelectValue placeholder="Selecione" /></SelectTrigger>
@@ -239,8 +283,8 @@ function MetaFieldsBlock({
               </Select>
             ) : (
               <Input
-                value={meta[f.key] ?? ""}
-                onChange={(e) => setMeta((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                value={maskValue(f.key, meta[f.key] ?? "")}
+                onChange={(e) => setMeta((prev) => ({ ...prev, [f.key]: maskValue(f.key, e.target.value) }))}
                 className="h-9"
               />
             )}
@@ -408,7 +452,7 @@ export default function Documentos() {
       toast.error("Preencha o título");
       return;
     }
-    const metadata = Object.fromEntries(Object.entries(editMeta).filter(([, v]) => v && v.trim()));
+    const metadata = Object.fromEntries(Object.entries(editMeta).filter(([, v]) => v && v.trim()).map(([k, v]) => [k, maskValue(k, v)]));
     updateMutation.mutate({
       id: editingId,
       title: editForm.title,
@@ -667,7 +711,7 @@ export default function Documentos() {
       toast.error("Selecione um arquivo e preencha o título");
       return;
     }
-    const metadata = Object.fromEntries(Object.entries(metaForm).filter(([, v]) => v && v.trim()));
+    const metadata = Object.fromEntries(Object.entries(metaForm).filter(([, v]) => v && v.trim()).map(([k, v]) => [k, maskValue(k, v)]));
     createMutation.mutate({
       title: form.title,
       description: form.description || undefined,
@@ -699,7 +743,7 @@ export default function Documentos() {
       const parts = [m.administradora || d.title];
       if (m.grupo) parts.push(`G${m.grupo}`);
       if (m.valorCredito) parts.push(m.valorCredito);
-      return { id: d.id, label: parts.filter(Boolean).join(" · ") };
+      return { id: d.id, label: parts.filter(Boolean).join(" · "), tipo: m.tipo || "" };
     });
 
   const renderRow = (doc: any) => (
