@@ -335,7 +335,7 @@ export default function Patrimonio() {
           {assets.map((asset: any) => {
             const Icon = assetTypeIcons[asset.assetType] || Package;
             return (
-              <Card key={asset.id} className="bg-card border-border">
+              <Card key={asset.id} className={`bg-card border-border ${asset.status === "inactive" ? "opacity-60" : ""}`}>
                 <CardContent className="pt-4">
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-3">
@@ -386,6 +386,11 @@ export default function Patrimonio() {
                       {asset.assetType === "consorcio" && asset.status === "active" && (
                         <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={() => openTransfer(asset)}>
                           <ArrowRightLeft className="h-3.5 w-3.5" /> Contemplado
+                        </Button>
+                      )}
+                      {asset.status === "inactive" && (
+                        <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={() => updateMutation.mutate({ id: asset.id, status: "active" }, { onSuccess: () => toast.success("Ativo reativado") })}>
+                          Reativar
                         </Button>
                       )}
                     </div>
