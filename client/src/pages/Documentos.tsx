@@ -43,6 +43,7 @@ import {
   MessageCircle,
   Mail,
   Link2,
+  Building2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -319,6 +320,43 @@ export default function Documentos() {
     } catch (err: any) {
       toast.error(err?.message ?? "Falha na análise de IA");
     }
+  };
+
+  // Bring a documented vehicle/property/company into the asset registry.
+  const [addAsset, setAddAsset] = useState<null | { assetType: string; name: string; value: string; holder: string }>(null);
+  const createAssetMutation = trpc.assets.create.useMutation({
+    onSuccess: () => {
+      utils.assets.list.invalidate();
+      utils.assets.summary.invalidate();
+      utils.dashboard.summary.invalidate();
+      setAddAsset(null);
+      toast.success("Adicionado ao patrimônio");
+    },
+  });
+
+  const openAddToPatrimonio = () => {
+    const cat = editForm.category;
+    const assetType = cat === "vehicle" || cat === "property" || cat === "company" ? cat : "other";
+    let name = editForm.title;
+    if (cat === "vehicle") name = [editMeta.marcaModelo, editMeta.placa].filter(Boolean).join(" - ") || editForm.title;
+    else if (cat === "property") name = editMeta.endereco || editForm.title;
+    else if (cat === "company") name = editMeta.razaoSocial || editForm.title;
+    const holder = editMeta.proprietario || editMeta.razaoSocial || "";
+    setAddAsset({ assetType, name, value: "", holder });
+  };
+
+  const handleAddAsset = async () => {
+    if (!addAsset) return;
+    if (!addAsset.name || !addAsset.value) {
+      toast.error("Preencha o nome e o valor estimado");
+      return;
+    }
+    await createAssetMutation.mutateAsync({
+      name: addAsset.name,
+      assetType: addAsset.assetType as any,
+      estimatedValue: addAsset.value,
+      holderName: addAsset.holder || undefined,
+    });
   };
 
   const openEdit = (doc: any) => {
@@ -1017,6 +1055,11 @@ export default function Documentos() {
                 {summarizeMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bot className="h-3.5 w-3.5 text-primary" />}
                 Resumo do consultor (IA)
               </Button>
+              {["vehicle", "property", "company"].includes(editForm.category) && (
+                <Button type="button" variant="outline" size="sm" className="gap-2" onClick={openAddToPatrimonio}>
+                  <Building2 className="h-3.5 w-3.5 text-primary" /> Adicionar ao patrimônio
+                </Button>
+              )}
             </div>
 
             {aiSummary && (
@@ -1081,6 +1124,52 @@ export default function Documentos() {
               </a>
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Adicionar documento ao patrimônio */}
+      <Dialog open={addAsset != null} onOpenChange={(v) => { if (!v) setAddAsset(null); }}>
+        <DialogContent className="bg-card border-border sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Adicionar ao patrimônio</DialogTitle>
+          </DialogHeader>
+          {addAsset && (
+            <div className="space-y-4">
+              <p className="text-xs text-muted-foreground">
+                O documento não traz valor de mercado — informe o valor estimado para somar ao patrimônio.
+              </p>
+              <div className="space-y-2">
+                <Label>Nome</Label>
+                <Input value={addAsset.name} onChange={(e) => setAddAsset({ ...addAsset, name: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Tipo</Label>
+                  <Select value={addAsset.assetType} onValueChange={(v) => setAddAsset({ ...addAsset, assetType: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="vehicle">Veículo</SelectItem>
+                      <SelectItem value="property">Imóvel</SelectItem>
+                      <SelectItem value="company">Empresa</SelectItem>
+                      <SelectItem value="investment">Investimento</SelectItem>
+                      <SelectItem value="other">Outro</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Valor estimado (R$)</Label>
+                  <Input type="number" step="0.01" min="0" inputMode="decimal" value={addAsset.value} onChange={(e) => setAddAsset({ ...addAsset, value: e.target.value })} placeholder="0,00" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Titular</Label>
+                <Input value={addAsset.holder} onChange={(e) => setAddAsset({ ...addAsset, holder: e.target.value })} placeholder="Pessoa ou empresa" />
+              </div>
+              <Button className="w-full" onClick={handleAddAsset} disabled={createAssetMutation.isPending}>
+                {createAssetMutation.isPending ? "Adicionando..." : "Adicionar ao patrimônio"}
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
