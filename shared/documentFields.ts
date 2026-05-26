@@ -83,6 +83,7 @@ export const CATEGORY_FIELDS: Record<string, DocField[]> = {
     { key: "valorCredito", label: "Valor do crédito" },
     { key: "dataAdesao", label: "Data de adesão" },
     { key: "situacao", label: "Situação", options: ["Em dia", "Contemplado", "Quitado", "Atrasado", "Cancelado"] },
+    { key: "pagador", label: "Quem paga" },
     { key: "lance", label: "Lance" },
   ],
   certificate: [
