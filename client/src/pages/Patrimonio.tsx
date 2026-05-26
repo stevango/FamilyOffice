@@ -34,6 +34,7 @@ import {
   Download,
   User,
   Coins,
+  ArrowRightLeft,
 } from "lucide-react";
 import { toast } from "sonner";
 import { downloadCsv } from "@/lib/export";
@@ -106,6 +107,53 @@ export default function Patrimonio() {
       toast.success("Ativo removido");
     },
   });
+
+  const updateMutation = trpc.assets.update.useMutation({
+    onSuccess: () => {
+      utils.assets.list.invalidate();
+      utils.assets.summary.invalidate();
+      utils.dashboard.summary.invalidate();
+    },
+  });
+
+  // Contemplated-consórcio transfer: turn the credit into a real asset (and
+  // archive the consórcio so the net worth is not double-counted).
+  const [transfer, setTransfer] = useState<any | null>(null);
+  const [transferForm, setTransferForm] = useState({ assetType: "vehicle", name: "", value: "" });
+
+  const openTransfer = (asset: any) => {
+    setTransferForm({
+      assetType: "vehicle",
+      name: asset.name.replace(/cons[óo]rcio/i, "").trim() || asset.name,
+      value: String(asset.estimatedValue ?? ""),
+    });
+    setTransfer(asset);
+  };
+
+  const createBemAndArchive = async () => {
+    if (!transfer) return;
+    if (!transferForm.name || !transferForm.value) {
+      toast.error("Preencha nome e valor do bem");
+      return;
+    }
+    await createMutation.mutateAsync({
+      name: transferForm.name,
+      assetType: transferForm.assetType as any,
+      estimatedValue: transferForm.value,
+      holderName: transfer.holderName || undefined,
+      holderDocument: transfer.holderDocument || undefined,
+    });
+    await updateMutation.mutateAsync({ id: transfer.id, status: "inactive" });
+    setTransfer(null);
+    toast.success("Bem criado e consórcio arquivado (sem duplicar)");
+  };
+
+  const archiveConsorcio = async () => {
+    if (!transfer) return;
+    await updateMutation.mutateAsync({ id: transfer.id, status: "inactive" });
+    setTransfer(null);
+    toast.success("Consórcio arquivado");
+  };
 
   const [form, setForm] = useState({
     name: "",
@@ -323,17 +371,24 @@ export default function Patrimonio() {
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
-                  <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
+                  <div className="mt-3 pt-3 border-t border-border flex items-center justify-between gap-2">
                     <div>
                       <p className="text-xs text-muted-foreground">Valor Estimado</p>
                       <p className="text-lg font-bold">{formatCurrency(asset.estimatedValue)}</p>
                     </div>
-                    {asset.acquisitionDate && (
-                      <div className="text-right">
-                        <p className="text-xs text-muted-foreground">Aquisição</p>
-                        <p className="text-sm">{formatDate(asset.acquisitionDate)}</p>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-3">
+                      {asset.acquisitionDate && (
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">Aquisição</p>
+                          <p className="text-sm">{formatDate(asset.acquisitionDate)}</p>
+                        </div>
+                      )}
+                      {asset.assetType === "consorcio" && asset.status === "active" && (
+                        <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={() => openTransfer(asset)}>
+                          <ArrowRightLeft className="h-3.5 w-3.5" /> Contemplado
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -349,6 +404,51 @@ export default function Patrimonio() {
           </CardContent>
         </Card>
       )}
+
+      {/* Consórcio contemplado → transferir para um bem */}
+      <Dialog open={transfer != null} onOpenChange={(v) => { if (!v) setTransfer(null); }}>
+        <DialogContent className="bg-card border-border max-w-md">
+          <DialogHeader>
+            <DialogTitle>Consórcio contemplado</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Registre o bem que a carta de crédito virou. O consórcio será arquivado para não contar em duplicidade no patrimônio.
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Tipo do bem</Label>
+                <Select value={transferForm.assetType} onValueChange={(v) => setTransferForm({ ...transferForm, assetType: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="vehicle">Veículo</SelectItem>
+                    <SelectItem value="property">Imóvel</SelectItem>
+                    <SelectItem value="company">Empresa</SelectItem>
+                    <SelectItem value="other">Outro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Valor do bem (R$)</Label>
+                <Input type="number" step="0.01" min="0" inputMode="decimal" value={transferForm.value} onChange={(e) => setTransferForm({ ...transferForm, value: e.target.value })} placeholder="0,00" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Nome do bem</Label>
+              <Input value={transferForm.name} onChange={(e) => setTransferForm({ ...transferForm, name: e.target.value })} placeholder="Ex: Honda Civic 2024" />
+            </div>
+            <Button className="w-full" onClick={createBemAndArchive} disabled={createMutation.isPending || updateMutation.isPending}>
+              {createMutation.isPending || updateMutation.isPending ? "Processando..." : "Criar bem e arquivar consórcio"}
+            </Button>
+            <Button variant="outline" className="w-full" onClick={archiveConsorcio} disabled={updateMutation.isPending}>
+              Já cadastrei o bem — apenas arquivar a carta
+            </Button>
+            <p className="text-xs text-muted-foreground text-center">
+              Para manter só a carta, feche esta janela — nada muda.
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
