@@ -131,7 +131,7 @@ export const documents = mysqlTable("documents", {
   description: text("description"),
   category: mysqlEnum("category", [
     "personal", "cnh", "property", "vehicle", "company", "legal",
-    "tax", "insurance", "contract", "certificate", "finance", "studies", "other",
+    "tax", "insurance", "contract", "certificate", "finance", "studies", "ir", "other",
   ]).default("other").notNull(),
   fileKey: varchar("fileKey", { length: 500 }).notNull(),
   fileUrl: varchar("fileUrl", { length: 1000 }).notNull(),
@@ -201,7 +201,7 @@ export type InsertLegalCase = typeof legalCases.$inferInsert;
 export const integrations = mysqlTable("integrations", {
   id: int("id").autoincrement().primaryKey(),
   householdId: int("householdId").notNull(),
-  provider: mysqlEnum("provider", ["jusbrasil"]).notNull(),
+  provider: mysqlEnum("provider", ["jusbrasil", "claude"]).notNull(),
   enabled: int("enabled").default(0).notNull(),
   credentials: text("credentials"),
   credentialHint: varchar("credentialHint", { length: 32 }),

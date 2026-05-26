@@ -1,6 +1,6 @@
 /** Catalog of partner integrations, shared by client and server. */
 
-export type IntegrationProvider = "jusbrasil";
+export type IntegrationProvider = "jusbrasil" | "claude";
 
 export interface IntegrationMeta {
   id: IntegrationProvider;
@@ -11,6 +11,8 @@ export interface IntegrationMeta {
   /** Label for the credential the user must paste (token / API key). */
   credentialLabel: string;
   docsUrl?: string;
+  /** Whether the provider exposes a manual "sync now" action. */
+  supportsSync?: boolean;
 }
 
 export const INTEGRATIONS: IntegrationMeta[] = [
@@ -21,6 +23,15 @@ export const INTEGRATIONS: IntegrationMeta[] = [
     feeds: "Jurídico",
     credentialLabel: "Token de API",
     docsUrl: "https://api.jusbrasil.com.br/docs/index.html",
+    supportsSync: true,
+  },
+  {
+    id: "claude",
+    name: "Consultor IA (Claude)",
+    description: "Resumo inteligente de documentos e contratos, com alerta de relevância para o Imposto de Renda. O texto do documento é enviado à Anthropic apenas quando você solicita a análise.",
+    feeds: "Documentos",
+    credentialLabel: "API Key (Anthropic)",
+    docsUrl: "https://docs.anthropic.com/en/api/overview",
   },
 ];
 

@@ -1,0 +1,1 @@
+ALTER TABLE `integrations` MODIFY COLUMN `provider` enum('jusbrasil','claude') NOT NULL;

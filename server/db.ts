@@ -284,6 +284,13 @@ export async function getDocumentByKey(householdId: number, fileKey: string) {
   return rows[0];
 }
 
+export async function getDocumentById(householdId: number, id: number) {
+  const rows = await getDb().select().from(documents)
+    .where(and(inArray(documents.userId, memberIds(householdId)), eq(documents.id, id)))
+    .limit(1);
+  return rows[0];
+}
+
 export async function createDocument(data: InsertDocument) {
   const result = await getDb().insert(documents).values(data);
   return { id: result[0].insertId };

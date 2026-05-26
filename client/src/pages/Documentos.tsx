@@ -33,6 +33,11 @@ import {
   Loader2,
   User,
   Pencil,
+  RefreshCw,
+  Bot,
+  AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -47,6 +52,7 @@ const categoryLabels: Record<string, string> = {
   company: "Empresa",
   legal: "Jurídico",
   tax: "Fiscal",
+  ir: "IR",
   insurance: "Seguro",
   contract: "Contrato",
   certificate: "Certidão",
@@ -63,6 +69,7 @@ const categoryColors: Record<string, string> = {
   company: "bg-purple-500/10 text-purple-400",
   legal: "bg-red-500/10 text-red-400",
   tax: "bg-orange-500/10 text-orange-400",
+  ir: "bg-rose-500/10 text-rose-400",
   insurance: "bg-cyan-500/10 text-cyan-400",
   contract: "bg-indigo-500/10 text-indigo-400",
   certificate: "bg-pink-500/10 text-pink-400",
@@ -192,8 +199,38 @@ export default function Documentos() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState({ title: "", description: "", category: "other" as string, tags: "", expiresAt: "" });
   const [editMeta, setEditMeta] = useState<Record<string, string>>({});
+  const [aiSummary, setAiSummary] = useState<{ resumo: string; pontos: string[]; comunicarContador: boolean; irJustificativa: string } | null>(null);
+
+  const reextractMutation = trpc.documents.reextract.useMutation();
+  const summarizeMutation = trpc.documents.summarize.useMutation();
+
+  const handleReextract = async () => {
+    if (editingId == null) return;
+    try {
+      const res = await reextractMutation.mutateAsync({ id: editingId });
+      if (Object.keys(res.fields).length > 0) {
+        setEditMeta((prev) => ({ ...prev, ...res.fields }));
+        toast.success("Arquivo relido — campos atualizados");
+      } else {
+        toast.message(res.hasText ? "Nenhum campo reconhecido" : "Não consegui ler texto do arquivo");
+      }
+    } catch (err: any) {
+      toast.error(err?.message ?? "Falha ao reler o arquivo");
+    }
+  };
+
+  const handleSummarize = async () => {
+    if (editingId == null) return;
+    try {
+      const res = await summarizeMutation.mutateAsync({ id: editingId });
+      setAiSummary(res);
+    } catch (err: any) {
+      toast.error(err?.message ?? "Falha na análise de IA");
+    }
+  };
 
   const openEdit = (doc: any) => {
+    setAiSummary(null);
     setEditForm({
       title: doc.title ?? "",
       description: doc.description ?? "",
@@ -381,6 +418,75 @@ export default function Documentos() {
     resetForm();
   };
 
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const toggleCat = (cat: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      next.has(cat) ? next.delete(cat) : next.add(cat);
+      return next;
+    });
+
+  const grouped: Record<string, any[]> = {};
+  (documents ?? []).forEach((d: any) => { (grouped[d.category] ??= []).push(d); });
+  const orderedCats = Object.keys(categoryLabels).filter((c) => grouped[c]?.length);
+
+  const renderRow = (doc: any) => (
+    <div key={doc.id} className="flex items-center justify-between px-4 py-3 hover:bg-accent/30 transition-colors">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${categoryColors[doc.category] || categoryColors.other}`}>
+          <FileText className="h-4 w-4" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-medium truncate">{doc.title}</p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="text-xs text-muted-foreground">{formatDate(doc.createdAt)}</span>
+            <span className="text-xs text-muted-foreground">·</span>
+            <span className="text-xs text-muted-foreground">{formatFileSize(doc.fileSize)}</span>
+            {(doc.ownerName || doc.ownerEmail) && (
+              <>
+                <span className="text-xs text-muted-foreground">·</span>
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <User className="h-3 w-3" />
+                  {doc.ownerName || doc.ownerEmail}
+                </span>
+              </>
+            )}
+            {doc.tags && (
+              <>
+                <span className="text-xs text-muted-foreground">·</span>
+                {doc.tags.split(",").slice(0, 2).map((tag: string, i: number) => (
+                  <Badge key={i} variant="secondary" className="text-[10px] px-1.5 py-0">{tag.trim()}</Badge>
+                ))}
+              </>
+            )}
+          </div>
+          {parseMetadata(doc).length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+              {parseMetadata(doc).map((m, i) => (
+                <span key={i} className="text-[10px] text-muted-foreground rounded bg-secondary/60 px-1.5 py-0.5">
+                  <span className="text-muted-foreground/70">{m.label}:</span> {m.value}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(doc)}>
+          <Pencil className="h-3.5 w-3.5" />
+        </Button>
+        <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+          <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer">
+            <Download className="h-3.5 w-3.5" />
+          </a>
+        </Button>
+        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => deleteMutation.mutate({ id: doc.id })}>
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       <div>
@@ -517,69 +623,37 @@ export default function Documentos() {
       {isLoading ? (
         <div className="space-y-3">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}</div>
       ) : documents && documents.length > 0 ? (
-        <Card className="bg-card border-border">
-          <CardContent className="p-0">
-            <div className="divide-y divide-border">
-              {documents.map((doc: any) => (
-                <div key={doc.id} className="flex items-center justify-between px-4 py-3 hover:bg-accent/30 transition-colors">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${categoryColors[doc.category] || categoryColors.other}`}>
-                      <FileText className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{doc.title}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-xs text-muted-foreground">{formatDate(doc.createdAt)}</span>
-                        <span className="text-xs text-muted-foreground">·</span>
-                        <span className="text-xs text-muted-foreground">{formatFileSize(doc.fileSize)}</span>
-                        {(doc.ownerName || doc.ownerEmail) && (
-                          <>
-                            <span className="text-xs text-muted-foreground">·</span>
-                            <span className="text-xs text-muted-foreground flex items-center gap-1">
-                              <User className="h-3 w-3" />
-                              {doc.ownerName || doc.ownerEmail}
-                            </span>
-                          </>
-                        )}
-                        {doc.tags && (
-                          <>
-                            <span className="text-xs text-muted-foreground">·</span>
-                            {doc.tags.split(",").slice(0, 2).map((tag: string, i: number) => (
-                              <Badge key={i} variant="secondary" className="text-[10px] px-1.5 py-0">{tag.trim()}</Badge>
-                            ))}
-                          </>
-                        )}
+        <div className="space-y-4">
+          {orderedCats.map((cat) => {
+            const docs = grouped[cat];
+            const isOpen = !collapsed.has(cat);
+            return (
+              <div key={cat}>
+                <button
+                  type="button"
+                  onClick={() => toggleCat(cat)}
+                  className="flex items-center gap-2 w-full text-left mb-2 px-1 focus:outline-none"
+                >
+                  <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isOpen ? "" : "-rotate-90"}`} />
+                  <span className={`h-6 w-6 rounded flex items-center justify-center shrink-0 ${categoryColors[cat] || categoryColors.other}`}>
+                    <FileText className="h-3.5 w-3.5" />
+                  </span>
+                  <span className="text-sm font-medium">{categoryLabels[cat] ?? cat}</span>
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{docs.length}</Badge>
+                </button>
+                {isOpen && (
+                  <Card className="bg-card border-border">
+                    <CardContent className="p-0">
+                      <div className="divide-y divide-border">
+                        {docs.map(renderRow)}
                       </div>
-                      {parseMetadata(doc).length > 0 && (
-                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                          {parseMetadata(doc).map((m, i) => (
-                            <span key={i} className="text-[10px] text-muted-foreground rounded bg-secondary/60 px-1.5 py-0.5">
-                              <span className="text-muted-foreground/70">{m.label}:</span> {m.value}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Badge variant="outline" className="text-xs">{categoryLabels[doc.category]}</Badge>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(doc)}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
-                      <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer">
-                        <Download className="h-3.5 w-3.5" />
-                      </a>
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => deleteMutation.mutate({ id: doc.id })}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            );
+          })}
+        </div>
       ) : (
         <Card className="bg-card border-border">
           <CardContent className="flex flex-col items-center justify-center py-16">
@@ -627,6 +701,41 @@ export default function Documentos() {
               onLookupCep={() => runCepLookup(editMeta.cep ?? "", (f) => setEditMeta((p) => ({ ...p, ...f })))}
               lookupPending={lookupCnpjMutation.isPending || lookupCepMutation.isPending}
             />
+
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm" className="gap-2" onClick={handleReextract} disabled={reextractMutation.isPending}>
+                {reextractMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                Reler arquivo
+              </Button>
+              <Button type="button" variant="outline" size="sm" className="gap-2" onClick={handleSummarize} disabled={summarizeMutation.isPending}>
+                {summarizeMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bot className="h-3.5 w-3.5 text-primary" />}
+                Resumo do consultor (IA)
+              </Button>
+            </div>
+
+            {aiSummary && (
+              <div className="space-y-2 rounded-lg border border-border/60 p-3">
+                <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
+                  <Sparkles className="h-3.5 w-3.5" /> Consultor IA
+                </div>
+                <p className="text-sm text-foreground">{aiSummary.resumo}</p>
+                {aiSummary.pontos.length > 0 && (
+                  <ul className="list-disc pl-5 space-y-0.5">
+                    {aiSummary.pontos.map((p, i) => (
+                      <li key={i} className="text-xs text-muted-foreground">{p}</li>
+                    ))}
+                  </ul>
+                )}
+                <div className={`flex items-start gap-2 rounded-md p-2 text-xs ${aiSummary.comunicarContador ? "bg-amber-500/10 text-amber-400" : "bg-emerald-500/10 text-emerald-400"}`}>
+                  {aiSummary.comunicarContador ? <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" /> : <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 shrink-0" />}
+                  <span>
+                    <strong>{aiSummary.comunicarContador ? "Comunicar ao contador (IR)" : "Sem ação para o IR"}</strong>
+                    {aiSummary.irJustificativa ? ` — ${aiSummary.irJustificativa}` : ""}
+                  </span>
+                </div>
+                <p className="text-[10px] text-muted-foreground">Gerado por IA — confira antes de decisões fiscais.</p>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label>Tags (separadas por vírgula)</Label>

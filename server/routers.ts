@@ -17,6 +17,7 @@ import {
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router, writeProcedure } from "./_core/trpc";
 import * as db from "./db";
+import { summarizeDocument } from "./ai";
 import { lookupCep } from "./cep";
 import { lookupCnpj } from "./cnpj";
 import { decryptSecret, encryptSecret, secretHint } from "./crypto";
@@ -441,6 +442,34 @@ export const appRouter = router({
       const text = await extractText(buffer, input.mimeType);
       return { fields: extractFields(text, input.category), hasText: text.length > 0 };
     }),
+    /** Re-read an existing document's file (local OCR) and re-extract its fields. */
+    reextract: writeProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+      const doc = await db.getDocumentById(ctx.user.householdId, input.id);
+      if (!doc) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado." });
+      const buffer = await storageReadBuffer(doc.fileKey).catch(() => null);
+      if (!buffer) return { fields: {} as Record<string, string>, hasText: false };
+      const text = await extractText(buffer, doc.mimeType ?? undefined);
+      return { fields: extractFields(text, doc.category), hasText: text.length > 0 };
+    }),
+    /** Consultor IA: summarize a document and flag income-tax relevance (Claude). */
+    summarize: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+      const doc = await db.getDocumentById(ctx.user.householdId, input.id);
+      if (!doc) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado." });
+      const integration = await db.getIntegration(ctx.user.householdId, "claude");
+      if (!integration?.credentials) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configure o Consultor IA (Claude) em Integrações." });
+      }
+      const buffer = await storageReadBuffer(doc.fileKey).catch(() => null);
+      if (!buffer) throw new TRPCError({ code: "NOT_FOUND", message: "Arquivo não encontrado." });
+      const text = await extractText(buffer, doc.mimeType ?? undefined);
+      if (!text) throw new TRPCError({ code: "UNPROCESSABLE_CONTENT", message: "Não consegui ler texto deste arquivo (imagem sem texto ou ilegível)." });
+      try {
+        const summary = await summarizeDocument({ apiKey: decryptSecret(integration.credentials), text, title: doc.title, category: doc.category });
+        return summary;
+      } catch (err) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: err instanceof Error ? err.message : "Falha na análise de IA." });
+      }
+    }),
     /** Look up official company data by CNPJ (public Receita data via BrasilAPI). */
     lookupCnpj: writeProcedure.input(z.object({ cnpj: z.string() })).mutation(async ({ input }) => {
       try {
@@ -466,7 +495,7 @@ export const appRouter = router({
     create: writeProcedure.input(z.object({
       title: z.string().min(1),
       description: z.string().optional(),
-      category: z.enum(["personal", "cnh", "property", "vehicle", "company", "legal", "tax", "insurance", "contract", "certificate", "finance", "studies", "other"]).default("other"),
+      category: z.enum(["personal", "cnh", "property", "vehicle", "company", "legal", "tax", "insurance", "contract", "certificate", "finance", "studies", "ir", "other"]).default("other"),
       fileKey: z.string(),
       fileUrl: z.string(),
       fileName: z.string(),
@@ -488,7 +517,7 @@ export const appRouter = router({
       id: z.number(),
       title: z.string().min(1).optional(),
       description: z.string().optional(),
-      category: z.enum(["personal", "cnh", "property", "vehicle", "company", "legal", "tax", "insurance", "contract", "certificate", "finance", "studies", "other"]).optional(),
+      category: z.enum(["personal", "cnh", "property", "vehicle", "company", "legal", "tax", "insurance", "contract", "certificate", "finance", "studies", "ir", "other"]).optional(),
       tags: z.string().optional(),
       expiresAt: z.string().optional(),
       metadata: z.record(z.string(), z.string()).optional(),
@@ -635,6 +664,9 @@ export const appRouter = router({
     }),
     /** Run a sync for a configured provider, importing data into its module. */
     sync: adminProcedure.input(z.object({ provider: z.enum(INTEGRATION_IDS) })).mutation(async ({ ctx, input }) => {
+      if (input.provider !== "jusbrasil") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Este provedor não possui sincronização." });
+      }
       const row = await db.getIntegration(ctx.user.householdId, input.provider);
       if (!row?.credentials) {
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configure as credenciais antes de sincronizar." });

@@ -133,7 +133,7 @@ export default function Integracoes() {
                     </div>
                   </div>
 
-                  {it.configured && (
+                  {it.configured && it.supportsSync && (
                     <div className="flex items-center justify-between gap-2 pt-1">
                       <Button
                         variant="secondary"

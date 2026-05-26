@@ -36,6 +36,20 @@
       "when": 1779755420707,
       "tag": "0004_talented_kree",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1779757855847,
+      "tag": "0005_perpetual_legion",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1779758014161,
+      "tag": "0006_blue_tarantula",
+      "breakpoints": true
     }
   ]
 }

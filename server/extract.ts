@@ -144,6 +144,7 @@ export function extractFields(text: string, category: string): Record<string, st
       set("matricula", detectMatricula(t));
       break;
     case "tax":
+    case "ir":
       set("cpfCnpj", detectCnpj(t) ?? detectCpf(t));
       set("exercicio", detectYear(t));
       set("valor", detectValor(t));

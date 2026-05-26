@@ -55,6 +55,12 @@ export const CATEGORY_FIELDS: Record<string, DocField[]> = {
     { key: "exercicio", label: "Exercício/Ano" },
     { key: "valor", label: "Valor" },
   ],
+  ir: [
+    { key: "exercicio", label: "Exercício/Ano" },
+    { key: "tipo", label: "Tipo (declaração/recibo/informe)" },
+    { key: "cpfCnpj", label: "CPF/CNPJ" },
+    { key: "valor", label: "Imposto a pagar/restituir" },
+  ],
   insurance: [
     { key: "apolice", label: "Apólice" },
     { key: "seguradora", label: "Seguradora" },
