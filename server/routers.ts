@@ -24,7 +24,7 @@ import { decryptSecret, encryptSecret, secretHint } from "./crypto";
 import { extractFields, extractText } from "./extract";
 import { IntegrationPendingError, syncJusbrasil } from "./jusbrasil";
 import { ExternalLookupError } from "./lookup";
-import { storageDelete, storagePut, storageReadBuffer, storageReadStream, storageStat } from "./storage";
+import { storageDelete, storagePut, storageReadBuffer } from "./storage";
 
 // ---- Minimal in-memory rate limiter (per key) for auth endpoints ----
 const attempts = new Map<string, { count: number; resetAt: number }>();
@@ -134,23 +134,29 @@ export function registerFileRoutes(app: Application) {
       return;
     }
 
+    const sendMissing = () => {
+      res.status(404).type("html").send(
+        `<!doctype html><html lang="pt-br"><body style="font-family:system-ui,sans-serif;background:#0a0a0a;color:#9a9a9a;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center"><div><p style="margin:0 0 6px">Arquivo não encontrado no servidor.</p><p style="font-size:12px;margin:0;color:#6a6a6a">Pode ter sido enviado antes da migração de armazenamento. Reenvie o documento.</p></div></body></html>`,
+      );
+    };
+
     // Only serve files that belong to a document in the user's household.
     const doc = await db.getDocumentByKey(user.householdId, key);
     if (!doc) {
-      res.status(404).send("Not found");
+      sendMissing();
       return;
     }
 
-    try {
-      const info = await storageStat(key);
-      res.set("Content-Type", doc.mimeType || "application/octet-stream");
-      res.set("Content-Length", String(info.size));
-      res.set("Cache-Control", "private, max-age=0, no-cache");
-      res.set("Content-Disposition", `inline; filename="${encodeURIComponent(doc.fileName)}"`);
-      storageReadStream(key).on("error", () => res.status(500).end()).pipe(res);
-    } catch {
-      res.status(404).send("Not found");
+    const buffer = await storageReadBuffer(key).catch(() => null);
+    if (!buffer) {
+      sendMissing();
+      return;
     }
+    res.set("Content-Type", doc.mimeType || "application/octet-stream");
+    res.set("Content-Length", String(buffer.length));
+    res.set("Cache-Control", "private, max-age=0, no-cache");
+    res.set("Content-Disposition", `inline; filename="${encodeURIComponent(doc.fileName)}"`);
+    res.send(buffer);
   });
 }
 

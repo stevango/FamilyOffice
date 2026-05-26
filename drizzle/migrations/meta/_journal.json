@@ -64,6 +64,13 @@
       "when": 1779802640579,
       "tag": "0008_skinny_pandemic",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1779803863735,
+      "tag": "0009_abandoned_invaders",
+      "breakpoints": true
     }
   ]
 }

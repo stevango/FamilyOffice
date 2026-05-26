@@ -1,4 +1,11 @@
-import { date, decimal, index, int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { customType, date, decimal, index, int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+
+/** Binary column for storing file contents in the database (up to 4GB). */
+const longblob = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return "longblob";
+  },
+});
 
 const timestamps = {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -216,3 +223,16 @@ export const integrations = mysqlTable("integrations", {
 
 export type Integration = typeof integrations.$inferSelect;
 export type InsertIntegration = typeof integrations.$inferInsert;
+
+/**
+ * File contents for the document vault, stored in the database so uploads
+ * survive deploys/restarts (the container filesystem is ephemeral).
+ */
+export const fileBlobs = mysqlTable("file_blobs", {
+  fileKey: varchar("fileKey", { length: 500 }).primaryKey(),
+  data: longblob("data").notNull(),
+  size: int("size").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type FileBlob = typeof fileBlobs.$inferSelect;
