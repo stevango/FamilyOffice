@@ -88,6 +88,7 @@ export default function Patrimonio() {
     activeTab !== "all" ? { assetType: activeTab } : undefined
   );
   const { data: summary } = trpc.assets.summary.useQuery();
+  const { data: consorcio } = trpc.documents.consorcioLeverage.useQuery();
 
   const createMutation = trpc.assets.create.useMutation({
     onSuccess: () => {
@@ -257,6 +258,60 @@ export default function Patrimonio() {
                 </div>
               );
             })}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Alavancagem via consórcios (dos documentos) */}
+      {consorcio && consorcio.count > 0 && (
+        <Card className="bg-card border-border">
+          <CardContent className="pt-4 space-y-4">
+            <div className="flex items-center gap-2">
+              <Coins className="h-4 w-4 text-sky-400" />
+              <span className="text-sm text-muted-foreground">Alavancagem via consórcios</span>
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{consorcio.count} vigente(s)</Badge>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <p className="text-xs text-muted-foreground">Crédito contratado (cartas)</p>
+                <p className="text-xl font-bold text-sky-400">{formatCurrency(consorcio.totalCredito)}</p>
+                <p className="text-[10px] text-muted-foreground">patrimônio em aquisição</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Já pago</p>
+                <p className="text-xl font-bold">{formatCurrency(consorcio.totalPago)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">A pagar</p>
+                <p className="text-xl font-bold">{formatCurrency(consorcio.totalAPagar)}</p>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>Progresso de pagamento</span>
+                <span>{consorcio.totalComprometido > 0 ? Math.round((consorcio.totalPago / consorcio.totalComprometido) * 100) : 0}%</span>
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-secondary/60 overflow-hidden">
+                <div className="h-full rounded-full bg-sky-500" style={{ width: `${consorcio.totalComprometido > 0 ? Math.min(100, Math.round((consorcio.totalPago / consorcio.totalComprometido) * 100)) : 0}%` }} />
+              </div>
+            </div>
+            {consorcio.totalPago > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Alavancagem: <span className="text-foreground font-medium">{(consorcio.totalCredito / consorcio.totalPago).toFixed(1)}×</span> — para cada R$ 1 já pago, ~{formatCurrency(consorcio.totalCredito / consorcio.totalPago)} de crédito acessível.
+              </p>
+            )}
+            <div className="space-y-2 pt-2 border-t border-border">
+              {consorcio.items.map((it) => (
+                <div key={it.id} className="flex items-center justify-between gap-3 text-xs">
+                  <span className="truncate text-muted-foreground">{it.administradora || it.title}</span>
+                  <span className="flex items-center gap-2 shrink-0">
+                    <span className="font-medium">{formatCurrency(it.credito)}</span>
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">{it.situacao}</Badge>
+                    <span className="text-muted-foreground w-9 text-right">{it.pct}%</span>
+                  </span>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       )}

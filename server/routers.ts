@@ -80,6 +80,14 @@ async function buildHouseholdContext(householdId: number): Promise<string> {
   ].join("\n");
 }
 
+/** Parse a Brazilian currency string ("R$ 1.234,56") to a number. */
+function parseBRL(v?: string): number {
+  if (!v) return 0;
+  const n = String(v).replace(/[^\d,.-]/g, "").replace(/\./g, "").replace(",", ".");
+  const f = parseFloat(n);
+  return Number.isFinite(f) ? f : 0;
+}
+
 /** Add `n` months to an ISO date (YYYY-MM-DD), clamping to the month's last day. */
 function addMonthsIso(iso: string, n: number): string {
   const [y, m, d] = iso.split("-").map(Number);
@@ -482,6 +490,42 @@ export const appRouter = router({
       category: z.string().optional(),
       memberId: z.number().optional(),
     }).optional()).query(async ({ ctx, input }) => db.getDocuments(ctx.user.householdId, input?.search, input?.category, input?.memberId)),
+    /** Aggregate active consórcio contracts (from documents) for the leverage view. */
+    consorcioLeverage: protectedProcedure.query(async ({ ctx }) => {
+      const docs = await db.getDocuments(ctx.user.householdId, undefined, "consorcio");
+      const items: Array<{ id: number; title: string; administradora: string; credito: number; situacao: string; pago: number; total: number; pct: number }> = [];
+      let totalCredito = 0, totalPago = 0, totalAPagar = 0, totalComprometido = 0;
+      for (const doc of docs) {
+        let meta: Record<string, string> = {};
+        try { meta = doc.metadata ? JSON.parse(doc.metadata) : {}; } catch { /* ignore */ }
+        const situacao = (meta.situacao ?? "").trim();
+        const low = situacao.toLowerCase();
+        if (low.includes("quitad") || low.includes("cancel")) continue; // só vigentes
+        const credito = parseBRL(meta.valorCredito);
+        const valorParcela = parseBRL(meta.valorParcela);
+        const parcelas = parseInt((meta.parcelas ?? "").replace(/\D/g, ""), 10) || 0;
+        const pagas = parseInt((meta.parcelasPagas ?? "").replace(/\D/g, ""), 10) || 0;
+        const total = valorParcela * parcelas;
+        const pago = valorParcela * Math.min(pagas, parcelas || pagas);
+        const aPagar = Math.max(0, total - pago);
+        totalCredito += credito;
+        totalComprometido += total;
+        totalPago += pago;
+        totalAPagar += aPagar;
+        items.push({
+          id: doc.id,
+          title: doc.title,
+          administradora: meta.administradora ?? "",
+          credito,
+          situacao: situacao || "—",
+          pago,
+          total,
+          pct: total > 0 ? Math.min(100, Math.round((pago / total) * 100)) : 0,
+        });
+      }
+      items.sort((a, b) => b.credito - a.credito);
+      return { count: items.length, totalCredito, totalPago, totalAPagar, totalComprometido, items };
+    }),
     /** Best-effort local extraction of category fields from an uploaded file. */
     analyze: writeProcedure.input(z.object({
       fileKey: z.string(),
