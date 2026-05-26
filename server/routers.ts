@@ -575,6 +575,8 @@ export const appRouter = router({
       acquisitionValue: z.string().optional(),
       acquisitionDate: z.string().optional(),
       location: z.string().optional(),
+      holderName: z.string().optional(),
+      holderDocument: z.string().optional(),
       status: z.enum(["active", "sold", "inactive"]).default("active"),
       notes: z.string().optional(),
     })).mutation(async ({ ctx, input }) => db.createAsset({ ...input, userId: ctx.user.id, acquisitionDate: input.acquisitionDate || null })),
@@ -587,6 +589,8 @@ export const appRouter = router({
       acquisitionValue: z.string().optional(),
       acquisitionDate: z.string().optional(),
       location: z.string().optional(),
+      holderName: z.string().optional(),
+      holderDocument: z.string().optional(),
       status: z.enum(["active", "sold", "inactive"]).optional(),
       notes: z.string().optional(),
     })).mutation(async ({ ctx, input }) => {

@@ -163,6 +163,8 @@ export const assets = mysqlTable("assets", {
   acquisitionValue: decimal("acquisitionValue", { precision: 15, scale: 2 }),
   acquisitionDate: date("acquisitionDate", { mode: "string" }),
   location: varchar("location", { length: 500 }),
+  holderName: varchar("holderName", { length: 255 }),
+  holderDocument: varchar("holderDocument", { length: 20 }),
   status: mysqlEnum("status", ["active", "sold", "inactive"]).default("active").notNull(),
   notes: text("notes"),
   ...timestamps,

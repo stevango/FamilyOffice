@@ -112,6 +112,8 @@ export default function Patrimonio() {
     acquisitionValue: "",
     acquisitionDate: "",
     location: "",
+    holderName: "",
+    holderDocument: "",
     notes: "",
   });
 
@@ -129,9 +131,11 @@ export default function Patrimonio() {
       acquisitionValue: form.acquisitionValue || undefined,
       acquisitionDate: form.acquisitionDate || undefined,
       location: form.location || undefined,
+      holderName: form.holderName || undefined,
+      holderDocument: form.holderDocument || undefined,
       notes: form.notes || undefined,
     });
-    setForm({ name: "", assetType: "property", description: "", estimatedValue: "", acquisitionValue: "", acquisitionDate: "", location: "", notes: "" });
+    setForm({ name: "", assetType: "property", description: "", estimatedValue: "", acquisitionValue: "", acquisitionDate: "", location: "", holderName: "", holderDocument: "", notes: "" });
   };
 
   const handleExport = () => {
@@ -245,6 +249,16 @@ export default function Patrimonio() {
                   <Input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="Cidade, Estado" />
                 </div>
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Em nome de (titular)</Label>
+                  <Input value={form.holderName} onChange={(e) => setForm({ ...form, holderName: e.target.value })} placeholder="Pessoa ou empresa" />
+                </div>
+                <div className="space-y-2">
+                  <Label>CPF/CNPJ</Label>
+                  <Input value={form.holderDocument} onChange={(e) => setForm({ ...form, holderDocument: e.target.value })} placeholder="Do titular" />
+                </div>
+              </div>
               <div className="space-y-2">
                 <Label>Observações</Label>
                 <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Detalhes adicionais..." rows={2} />
@@ -292,6 +306,11 @@ export default function Patrimonio() {
                             <User className="h-3 w-3 text-muted-foreground" />
                             <span className="text-xs text-muted-foreground">{asset.ownerName || asset.ownerEmail}</span>
                           </div>
+                        )}
+                        {(asset.holderName || asset.holderDocument) && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Titular: {asset.holderName || "—"}{asset.holderDocument ? ` · ${asset.holderDocument}` : ""}
+                          </p>
                         )}
                       </div>
                     </div>
