@@ -32,6 +32,7 @@ import {
   Sparkles,
   Loader2,
   User,
+  Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -94,18 +95,72 @@ function parseMetadata(doc: { metadata?: string | null; category: string }): { l
   }
 }
 
+/** Editable per-category fields, shared by the create and edit dialogs. */
+function MetaFieldsBlock({
+  category, meta, setMeta, analyzing, onLookupCnpj, onLookupCep, lookupPending,
+}: {
+  category: string;
+  meta: Record<string, string>;
+  setMeta: (updater: (prev: Record<string, string>) => Record<string, string>) => void;
+  analyzing?: boolean;
+  onLookupCnpj: () => void;
+  onLookupCep: () => void;
+  lookupPending: boolean;
+}) {
+  const fields = fieldsForCategory(category);
+  if (fields.length === 0) return null;
+  return (
+    <div className="space-y-3 rounded-lg border border-border/60 p-3">
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        {analyzing ? (
+          <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Analisando documento...</>
+        ) : (
+          <><Sparkles className="h-3.5 w-3.5 text-primary" /> Dados do documento (preenchidos automaticamente quando possível)</>
+        )}
+      </div>
+      {category === "company" && (
+        <Button type="button" variant="outline" size="sm" className="gap-2" onClick={onLookupCnpj} disabled={lookupPending}>
+          {lookupPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+          Consultar CNPJ na Receita
+        </Button>
+      )}
+      {category === "property" && (
+        <Button type="button" variant="outline" size="sm" className="gap-2" onClick={onLookupCep} disabled={lookupPending}>
+          {lookupPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+          Buscar endereço por CEP
+        </Button>
+      )}
+      <div className="grid grid-cols-2 gap-3">
+        {fields.map((f) => (
+          <div key={f.key} className="space-y-1">
+            <Label className="text-xs">{f.label}</Label>
+            <Input
+              value={meta[f.key] ?? ""}
+              onChange={(e) => setMeta((prev) => ({ ...prev, [f.key]: e.target.value }))}
+              className="h-9"
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Documentos() {
   const { user } = useAuth();
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [memberFilter, setMemberFilter] = useState<string>("all");
   const [open, setOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const utils = trpc.useUtils();
 
+  const { data: members } = trpc.household.members.useQuery();
   const { data: documents, isLoading } = trpc.documents.list.useQuery({
     search: search || undefined,
     category: categoryFilter !== "all" ? categoryFilter : undefined,
+    memberId: memberFilter !== "all" ? Number(memberFilter) : undefined,
   });
 
   const createMutation = trpc.documents.create.useMutation({
@@ -124,6 +179,52 @@ export default function Documentos() {
       toast.success("Documento removido");
     },
   });
+
+  const updateMutation = trpc.documents.update.useMutation({
+    onSuccess: () => {
+      utils.documents.list.invalidate();
+      utils.dashboard.summary.invalidate();
+      setEditingId(null);
+      toast.success("Documento atualizado");
+    },
+  });
+
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState({ title: "", description: "", category: "other" as string, tags: "", expiresAt: "" });
+  const [editMeta, setEditMeta] = useState<Record<string, string>>({});
+
+  const openEdit = (doc: any) => {
+    setEditForm({
+      title: doc.title ?? "",
+      description: doc.description ?? "",
+      category: doc.category ?? "other",
+      tags: doc.tags ?? "",
+      expiresAt: doc.expiresAt ?? "",
+    });
+    let meta: Record<string, string> = {};
+    try { if (doc.metadata) meta = JSON.parse(doc.metadata); } catch { /* ignore */ }
+    setEditMeta(meta);
+    setEditingId(doc.id);
+  };
+
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingId == null) return;
+    if (!editForm.title.trim()) {
+      toast.error("Preencha o título");
+      return;
+    }
+    const metadata = Object.fromEntries(Object.entries(editMeta).filter(([, v]) => v && v.trim()));
+    updateMutation.mutate({
+      id: editingId,
+      title: editForm.title,
+      description: editForm.description || undefined,
+      category: editForm.category as any,
+      tags: editForm.tags,
+      expiresAt: editForm.expiresAt || undefined,
+      metadata,
+    });
+  };
 
   const [form, setForm] = useState({
     title: "",
@@ -158,8 +259,8 @@ export default function Documentos() {
   const lookupCnpjMutation = trpc.documents.lookupCnpj.useMutation();
   const lookupCepMutation = trpc.documents.lookupCep.useMutation();
 
-  const handleLookupCep = async () => {
-    const digits = (metaForm.cep ?? "").replace(/\D/g, "");
+  const runCepLookup = async (cep: string, apply: (f: Record<string, string>) => void) => {
+    const digits = (cep ?? "").replace(/\D/g, "");
     if (digits.length !== 8) {
       toast.error("Informe um CEP com 8 dígitos");
       return;
@@ -167,7 +268,7 @@ export default function Documentos() {
     try {
       const res = await lookupCepMutation.mutateAsync({ cep: digits });
       if (Object.keys(res.fields).length > 0) {
-        setMetaForm((prev) => ({ ...prev, ...res.fields }));
+        apply(res.fields);
         toast.success("Endereço carregado");
       } else {
         toast.error("Nenhum endereço para este CEP");
@@ -177,8 +278,8 @@ export default function Documentos() {
     }
   };
 
-  const handleLookupCnpj = async () => {
-    const digits = (metaForm.cnpj ?? "").replace(/\D/g, "");
+  const runCnpjLookup = async (cnpj: string, apply: (f: Record<string, string>) => void) => {
+    const digits = (cnpj ?? "").replace(/\D/g, "");
     if (digits.length !== 14) {
       toast.error("Informe um CNPJ com 14 dígitos");
       return;
@@ -187,7 +288,7 @@ export default function Documentos() {
       const res = await lookupCnpjMutation.mutateAsync({ cnpj: digits });
       if (Object.keys(res.fields).length > 0) {
         // Official data overrides locally-read values.
-        setMetaForm((prev) => ({ ...prev, ...res.fields }));
+        apply(res.fields);
         toast.success("Dados da Receita carregados");
       } else {
         toast.error("Nenhum dado retornado para este CNPJ");
@@ -310,6 +411,18 @@ export default function Documentos() {
             ))}
           </SelectContent>
         </Select>
+        <Select value={memberFilter} onValueChange={setMemberFilter}>
+          <SelectTrigger className="w-full sm:w-44">
+            <User className="h-4 w-4 mr-2" />
+            <SelectValue placeholder="Membro" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os membros</SelectItem>
+            {members?.map((m: any) => (
+              <SelectItem key={m.id} value={String(m.id)}>{m.name || m.email}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Button variant="outline" size="sm" className="gap-2" onClick={handleExport}>
           <Download className="h-4 w-4" /> Exportar
         </Button>
@@ -378,55 +491,15 @@ export default function Documentos() {
                 </div>
               </div>
 
-              {fieldsForCategory(form.category).length > 0 && (
-                <div className="space-y-3 rounded-lg border border-border/60 p-3">
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    {analyzing ? (
-                      <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Analisando documento...</>
-                    ) : (
-                      <><Sparkles className="h-3.5 w-3.5 text-primary" /> Dados do documento (preenchidos automaticamente quando possível)</>
-                    )}
-                  </div>
-                  {form.category === "company" && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-2"
-                      onClick={handleLookupCnpj}
-                      disabled={lookupCnpjMutation.isPending}
-                    >
-                      {lookupCnpjMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
-                      Consultar CNPJ na Receita
-                    </Button>
-                  )}
-                  {form.category === "property" && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-2"
-                      onClick={handleLookupCep}
-                      disabled={lookupCepMutation.isPending}
-                    >
-                      {lookupCepMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
-                      Buscar endereço por CEP
-                    </Button>
-                  )}
-                  <div className="grid grid-cols-2 gap-3">
-                    {fieldsForCategory(form.category).map((f) => (
-                      <div key={f.key} className="space-y-1">
-                        <Label className="text-xs">{f.label}</Label>
-                        <Input
-                          value={metaForm[f.key] ?? ""}
-                          onChange={(e) => setMetaForm({ ...metaForm, [f.key]: e.target.value })}
-                          className="h-9"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <MetaFieldsBlock
+                category={form.category}
+                meta={metaForm}
+                setMeta={setMetaForm}
+                analyzing={analyzing}
+                onLookupCnpj={() => runCnpjLookup(metaForm.cnpj ?? "", (f) => setMetaForm((p) => ({ ...p, ...f })))}
+                onLookupCep={() => runCepLookup(metaForm.cep ?? "", (f) => setMetaForm((p) => ({ ...p, ...f })))}
+                lookupPending={lookupCnpjMutation.isPending || lookupCepMutation.isPending}
+              />
 
               <div className="space-y-2">
                 <Label>Tags (separadas por vírgula)</Label>
@@ -490,6 +563,9 @@ export default function Documentos() {
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <Badge variant="outline" className="text-xs">{categoryLabels[doc.category]}</Badge>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(doc)}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
                       <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer">
                         <Download className="h-3.5 w-3.5" />
@@ -513,6 +589,55 @@ export default function Documentos() {
           </CardContent>
         </Card>
       )}
+
+      {/* Edit Dialog */}
+      <Dialog open={editingId != null} onOpenChange={(v) => { if (!v) setEditingId(null); }}>
+        <DialogContent className="bg-card border-border max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Editar Documento</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleEditSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Título</Label>
+              <Input value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} placeholder="Nome do documento" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Categoria</Label>
+                <Select value={editForm.category} onValueChange={(v) => setEditForm({ ...editForm, category: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(categoryLabels).map(([key, label]) => (
+                      <SelectItem key={key} value={key}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Vencimento</Label>
+                <Input type="date" value={editForm.expiresAt} onChange={(e) => setEditForm({ ...editForm, expiresAt: e.target.value })} />
+              </div>
+            </div>
+
+            <MetaFieldsBlock
+              category={editForm.category}
+              meta={editMeta}
+              setMeta={setEditMeta}
+              onLookupCnpj={() => runCnpjLookup(editMeta.cnpj ?? "", (f) => setEditMeta((p) => ({ ...p, ...f })))}
+              onLookupCep={() => runCepLookup(editMeta.cep ?? "", (f) => setEditMeta((p) => ({ ...p, ...f })))}
+              lookupPending={lookupCnpjMutation.isPending || lookupCepMutation.isPending}
+            />
+
+            <div className="space-y-2">
+              <Label>Tags (separadas por vírgula)</Label>
+              <Input value={editForm.tags} onChange={(e) => setEditForm({ ...editForm, tags: e.target.value })} placeholder="Ex: CNH, pessoal, 2024" />
+            </div>
+            <Button type="submit" className="w-full" disabled={updateMutation.isPending}>
+              {updateMutation.isPending ? "Salvando..." : "Salvar alterações"}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -32,6 +32,7 @@ import {
   MapPin,
   Package,
   Download,
+  User,
 } from "lucide-react";
 import { toast } from "sonner";
 import { downloadCsv } from "@/lib/export";
@@ -284,6 +285,12 @@ export default function Patrimonio() {
                           <div className="flex items-center gap-1 mt-2">
                             <MapPin className="h-3 w-3 text-muted-foreground" />
                             <span className="text-xs text-muted-foreground">{asset.location}</span>
+                          </div>
+                        )}
+                        {(asset.ownerName || asset.ownerEmail) && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <User className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground">{asset.ownerName || asset.ownerEmail}</span>
                           </div>
                         )}
                       </div>

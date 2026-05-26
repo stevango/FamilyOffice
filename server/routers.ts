@@ -424,7 +424,8 @@ export const appRouter = router({
     list: protectedProcedure.input(z.object({
       search: z.string().optional(),
       category: z.string().optional(),
-    }).optional()).query(async ({ ctx, input }) => db.getDocuments(ctx.user.householdId, input?.search, input?.category)),
+      memberId: z.number().optional(),
+    }).optional()).query(async ({ ctx, input }) => db.getDocuments(ctx.user.householdId, input?.search, input?.category, input?.memberId)),
     /** Best-effort local extraction of category fields from an uploaded file. */
     analyze: writeProcedure.input(z.object({
       fileKey: z.string(),

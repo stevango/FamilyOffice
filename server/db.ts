@@ -180,8 +180,11 @@ export async function deleteCard(id: number, householdId: number) {
 // ============ TRANSACTIONS ============
 
 export async function getTransactions(householdId: number, limit = 50, offset = 0) {
-  return getDb().select().from(transactions)
-    .where(inArray(transactions.userId, memberIds(householdId)))
+  return getDb()
+    .select({ ...getTableColumns(transactions), ownerName: users.name, ownerEmail: users.email })
+    .from(transactions)
+    .innerJoin(users, eq(users.id, transactions.userId))
+    .where(eq(users.householdId, householdId))
     .orderBy(desc(transactions.transactionDate))
     .limit(limit)
     .offset(offset);
@@ -250,10 +253,13 @@ export async function getMonthlyCashFlow(householdId: number, months = 6) {
 
 // ============ DOCUMENTS ============
 
-export async function getDocuments(householdId: number, search?: string, category?: string) {
+export async function getDocuments(householdId: number, search?: string, category?: string, memberId?: number) {
   const conditions = [eq(users.householdId, householdId)];
   if (category) {
     conditions.push(eq(documents.category, category as any));
+  }
+  if (memberId) {
+    conditions.push(eq(documents.userId, memberId));
   }
   if (search) {
     conditions.push(
@@ -298,11 +304,16 @@ export async function deleteDocument(id: number, householdId: number) {
 // ============ ASSETS ============
 
 export async function getAssets(householdId: number, assetType?: string) {
-  const conditions = [inArray(assets.userId, memberIds(householdId))];
+  const conditions = [eq(users.householdId, householdId)];
   if (assetType) {
     conditions.push(eq(assets.assetType, assetType as any));
   }
-  return getDb().select().from(assets).where(and(...conditions)).orderBy(desc(assets.createdAt));
+  return getDb()
+    .select({ ...getTableColumns(assets), ownerName: users.name, ownerEmail: users.email })
+    .from(assets)
+    .innerJoin(users, eq(users.id, assets.userId))
+    .where(and(...conditions))
+    .orderBy(desc(assets.createdAt));
 }
 
 export async function createAsset(data: InsertAsset) {
@@ -334,7 +345,12 @@ export async function getAssetsSummary(householdId: number) {
 // ============ LEGAL CASES ============
 
 export async function getLegalCases(householdId: number) {
-  return getDb().select().from(legalCases).where(inArray(legalCases.userId, memberIds(householdId))).orderBy(desc(legalCases.createdAt));
+  return getDb()
+    .select({ ...getTableColumns(legalCases), ownerName: users.name, ownerEmail: users.email })
+    .from(legalCases)
+    .innerJoin(users, eq(users.id, legalCases.userId))
+    .where(eq(users.householdId, householdId))
+    .orderBy(desc(legalCases.createdAt));
 }
 
 export async function createLegalCase(data: InsertLegalCase) {

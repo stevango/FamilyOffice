@@ -275,7 +275,11 @@ function TransactionsTab() {
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">{tx.description}</p>
-                      <p className="text-xs text-muted-foreground">{formatDate(tx.transactionDate)} {tx.category ? `· ${tx.category}` : ""}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatDate(tx.transactionDate)}
+                        {tx.category ? ` · ${tx.category}` : ""}
+                        {(tx.ownerName || tx.ownerEmail) ? ` · ${tx.ownerName || tx.ownerEmail}` : ""}
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">

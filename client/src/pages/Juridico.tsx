@@ -33,6 +33,7 @@ import {
   PauseCircle,
   Archive,
   Download,
+  User,
 } from "lucide-react";
 import { toast } from "sonner";
 import { downloadCsv } from "@/lib/export";
@@ -329,6 +330,11 @@ export default function Juridico() {
                           {legalCase.nextDeadline && (
                             <span className="flex items-center gap-1">
                               <Calendar className="h-3 w-3" /> Prazo: {formatDate(legalCase.nextDeadline)}
+                            </span>
+                          )}
+                          {(legalCase.ownerName || legalCase.ownerEmail) && (
+                            <span className="flex items-center gap-1">
+                              <User className="h-3 w-3" /> {legalCase.ownerName || legalCase.ownerEmail}
                             </span>
                           )}
                         </div>
