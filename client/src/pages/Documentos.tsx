@@ -105,6 +105,12 @@ function parseMetadata(doc: { metadata?: string | null; category: string }): { l
   }
 }
 
+/** Whether the saved AI summary flagged this document for the accountant (IR). */
+function needsAccountant(doc: { aiSummary?: string | null }): boolean {
+  if (!doc.aiSummary) return false;
+  try { return JSON.parse(doc.aiSummary)?.comunicarContador === true; } catch { return false; }
+}
+
 /** Estimated end date = adesão + N installments (months), as dd/mm/aaaa. */
 function computeEncerramento(dataAdesao?: string, parcelas?: string): string | null {
   const m = (dataAdesao ?? "").match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
@@ -578,6 +584,11 @@ export default function Documentos() {
         <div className="min-w-0">
           <p className="text-sm font-medium truncate">{doc.title}</p>
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+            {needsAccountant(doc) && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-500/50 bg-amber-500/10 text-amber-400 gap-1">
+                <AlertTriangle className="h-2.5 w-2.5" /> Comunicar ao contador (IR)
+              </Badge>
+            )}
             {!doc.hasFile && (
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-500/40 text-amber-400 gap-1">
                 <AlertTriangle className="h-2.5 w-2.5" /> Arquivo ausente — reenviar
@@ -808,6 +819,15 @@ export default function Documentos() {
           </DialogContent>
         </Dialog>
       </div>
+
+      {documents && documents.filter(needsAccountant).length > 0 && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>
+            {documents.filter(needsAccountant).length} documento(s) a comunicar ao contador para o Imposto de Renda.
+          </span>
+        </div>
+      )}
 
       {/* Documents List */}
       {isLoading ? (
