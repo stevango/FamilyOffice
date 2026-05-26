@@ -497,7 +497,9 @@ export const appRouter = router({
       const text = await extractText(buffer, doc.mimeType ?? undefined);
       if (!text) throw new TRPCError({ code: "UNPROCESSABLE_CONTENT", message: "Não consegui ler texto deste arquivo (imagem sem texto ou ilegível)." });
       try {
-        return await summarizeDocument({ provider: ai.provider, apiKey: ai.apiKey, text, title: doc.title, category: doc.category });
+        const summary = await summarizeDocument({ provider: ai.provider, apiKey: ai.apiKey, text, title: doc.title, category: doc.category });
+        await db.updateDocument(doc.id, ctx.user.householdId, { aiSummary: JSON.stringify(summary) } as any);
+        return summary;
       } catch (err) {
         throw new TRPCError({ code: "BAD_REQUEST", message: err instanceof Error ? err.message : "Falha na análise de IA." });
       }

@@ -148,6 +148,7 @@ export const documents = mysqlTable("documents", {
   tags: text("tags"),
   expiresAt: date("expiresAt", { mode: "string" }),
   metadata: text("metadata"),
+  aiSummary: text("aiSummary"),
   ...timestamps,
 }, (t) => [
   index("documents_userId_idx").on(t.userId),

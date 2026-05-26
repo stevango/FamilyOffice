@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -103,6 +103,17 @@ function parseMetadata(doc: { metadata?: string | null; category: string }): { l
   } catch {
     return [];
   }
+}
+
+/** Estimated end date = adesão + N installments (months), as dd/mm/aaaa. */
+function computeEncerramento(dataAdesao?: string, parcelas?: string): string | null {
+  const m = (dataAdesao ?? "").match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  const n = parseInt((parcelas ?? "").replace(/\D/g, ""), 10);
+  if (!m || !n) return null;
+  const [, dd, mm, yyyy] = m;
+  const d = new Date(Date.UTC(Number(yyyy), Number(mm) - 1 + n, Number(dd)));
+  if (Number.isNaN(d.getTime())) return null;
+  return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()}`;
 }
 
 /** For a consórcio doc, a "paid X/Y (NN%)" progress string, when known. */
@@ -271,7 +282,9 @@ export default function Documentos() {
   };
 
   const openEdit = (doc: any) => {
-    setAiSummary(null);
+    let saved: typeof aiSummary = null;
+    try { if (doc.aiSummary) saved = JSON.parse(doc.aiSummary); } catch { /* ignore */ }
+    setAiSummary(saved);
     setEditForm({
       title: doc.title ?? "",
       description: doc.description ?? "",
@@ -639,6 +652,19 @@ export default function Documentos() {
       </div>
     </div>
   );
+
+  // Auto-fill the consórcio end date from adesão + total installments.
+  useEffect(() => {
+    if (form.category !== "consorcio") return;
+    const enc = computeEncerramento(metaForm.dataAdesao, metaForm.parcelas);
+    if (enc && enc !== metaForm.dataEncerramento) setMetaForm((p) => ({ ...p, dataEncerramento: enc }));
+  }, [form.category, metaForm.dataAdesao, metaForm.parcelas, metaForm.dataEncerramento]);
+
+  useEffect(() => {
+    if (editForm.category !== "consorcio") return;
+    const enc = computeEncerramento(editMeta.dataAdesao, editMeta.parcelas);
+    if (enc && enc !== editMeta.dataEncerramento) setEditMeta((p) => ({ ...p, dataEncerramento: enc }));
+  }, [editForm.category, editMeta.dataAdesao, editMeta.parcelas, editMeta.dataEncerramento]);
 
   return (
     <div className="space-y-6">
