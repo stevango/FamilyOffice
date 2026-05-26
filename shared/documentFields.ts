@@ -2,7 +2,7 @@
  * Structured fields captured per document category. These drive the dynamic
  * form in the Cofre Digital and the (best-effort) automatic extraction.
  */
-export type DocField = { key: string; label: string };
+export type DocField = { key: string; label: string; options?: string[] };
 
 export const CATEGORY_FIELDS: Record<string, DocField[]> = {
   vehicle: [
@@ -74,7 +74,7 @@ export const CATEGORY_FIELDS: Record<string, DocField[]> = {
   ],
   consorcio: [
     { key: "administradora", label: "Administradora" },
-    { key: "tipo", label: "Tipo (imóvel/veículo/serviço)" },
+    { key: "tipo", label: "Tipo", options: ["Imóvel", "Veículo", "Serviços", "Moto", "Outro"] },
     { key: "grupo", label: "Grupo" },
     { key: "cota", label: "Cota" },
     { key: "parcelas", label: "Parcelas (total)" },
@@ -82,7 +82,7 @@ export const CATEGORY_FIELDS: Record<string, DocField[]> = {
     { key: "valorParcela", label: "Valor da parcela" },
     { key: "valorCredito", label: "Valor do crédito" },
     { key: "dataAdesao", label: "Data de adesão" },
-    { key: "situacao", label: "Situação (contemplado/em dia/quitado)" },
+    { key: "situacao", label: "Situação", options: ["Em dia", "Contemplado", "Quitado", "Atrasado", "Cancelado"] },
     { key: "lance", label: "Lance" },
   ],
   certificate: [

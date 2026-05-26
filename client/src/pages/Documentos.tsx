@@ -168,11 +168,22 @@ function MetaFieldsBlock({
         {fields.map((f) => (
           <div key={f.key} className="space-y-1">
             <Label className="text-xs">{f.label}</Label>
-            <Input
-              value={meta[f.key] ?? ""}
-              onChange={(e) => setMeta((prev) => ({ ...prev, [f.key]: e.target.value }))}
-              className="h-9"
-            />
+            {f.options ? (
+              <Select value={meta[f.key] ?? ""} onValueChange={(v) => setMeta((prev) => ({ ...prev, [f.key]: v }))}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Selecione" /></SelectTrigger>
+                <SelectContent>
+                  {[...f.options, ...(meta[f.key] && !f.options.includes(meta[f.key]) ? [meta[f.key]] : [])].map((opt) => (
+                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                value={meta[f.key] ?? ""}
+                onChange={(e) => setMeta((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                className="h-9"
+              />
+            )}
           </div>
         ))}
       </div>

@@ -234,6 +234,33 @@ export default function Patrimonio() {
         </Card>
       </div>
 
+      {/* Composição por tipo */}
+      {summary && summary.byType.length > 0 && summary.totalValue > 0 && (
+        <Card className="bg-card border-border">
+          <CardContent className="pt-4 space-y-2.5">
+            <span className="text-sm text-muted-foreground">Composição do patrimônio</span>
+            {[...summary.byType].sort((a, b) => b.total - a.total).map((t) => {
+              const Icon = assetTypeIcons[t.assetType] || Package;
+              const pct = Math.round((t.total / summary.totalValue) * 100);
+              return (
+                <div key={t.assetType} className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                      <Icon className="h-3.5 w-3.5" /> {assetTypeLabels[t.assetType] ?? t.assetType}
+                      <span className="text-muted-foreground/60">({t.count})</span>
+                    </span>
+                    <span className="font-medium">{formatCurrency(t.total)} · {pct}%</span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-secondary/60 overflow-hidden">
+                    <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Tabs and Add */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full sm:w-auto">

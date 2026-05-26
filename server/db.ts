@@ -345,9 +345,22 @@ export async function getAssetsSummary(householdId: number) {
   }).from(assets)
     .where(and(inArray(assets.userId, memberIds(householdId)), eq(assets.status, "active")));
 
+  const byTypeRows = await getDb().select({
+    assetType: assets.assetType,
+    total: sql<string>`SUM(${assets.estimatedValue})`,
+    count: sql<number>`COUNT(*)`,
+  }).from(assets)
+    .where(and(inArray(assets.userId, memberIds(householdId)), eq(assets.status, "active")))
+    .groupBy(assets.assetType);
+
   return {
     totalValue: parseFloat(result?.totalValue || "0"),
     count: Number(result?.count ?? 0),
+    byType: byTypeRows.map((r) => ({
+      assetType: r.assetType,
+      total: parseFloat(r.total || "0"),
+      count: Number(r.count ?? 0),
+    })),
   };
 }
 
