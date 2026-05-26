@@ -545,6 +545,19 @@ export const appRouter = router({
         metadata: metadata && Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null,
       });
     }),
+    /** Re-attach a freshly uploaded file to an existing document (keeps metadata). */
+    replaceFile: writeProcedure.input(z.object({
+      id: z.number(),
+      fileKey: z.string(),
+      fileUrl: z.string(),
+      fileName: z.string(),
+      fileSize: z.number().optional(),
+      mimeType: z.string().optional(),
+    })).mutation(async ({ ctx, input }) => {
+      const { id, ...data } = input;
+      await db.updateDocument(id, ctx.user.householdId, data as any);
+      return { success: true };
+    }),
     update: writeProcedure.input(z.object({
       id: z.number(),
       title: z.string().min(1).optional(),

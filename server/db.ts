@@ -8,6 +8,7 @@ import {
   bankAccounts, InsertBankAccount,
   cards, InsertCard,
   documents, InsertDocument,
+  fileBlobs,
   households,
   integrations, InsertIntegration,
   invites, InsertInvite,
@@ -270,9 +271,10 @@ export async function getDocuments(householdId: number, search?: string, categor
     );
   }
   return getDb()
-    .select({ ...getTableColumns(documents), ownerName: users.name, ownerEmail: users.email })
+    .select({ ...getTableColumns(documents), ownerName: users.name, ownerEmail: users.email, hasFile: sql<number>`(${fileBlobs.fileKey} IS NOT NULL)` })
     .from(documents)
     .innerJoin(users, eq(users.id, documents.userId))
+    .leftJoin(fileBlobs, eq(fileBlobs.fileKey, documents.fileKey))
     .where(and(...conditions))
     .orderBy(desc(documents.createdAt));
 }

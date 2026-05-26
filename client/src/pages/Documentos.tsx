@@ -163,6 +163,8 @@ export default function Documentos() {
   const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const replaceInputRef = useRef<HTMLInputElement>(null);
+  const [replacingId, setReplacingId] = useState<number | null>(null);
   const utils = trpc.useUtils();
 
   const { data: members } = trpc.household.members.useQuery();
@@ -392,6 +394,50 @@ export default function Documentos() {
     if (file) void uploadFile(file);
   };
 
+  const replaceFileMutation = trpc.documents.replaceFile.useMutation({
+    onSuccess: () => { utils.documents.list.invalidate(); toast.success("Arquivo reenviado"); },
+  });
+
+  const startReplace = (id: number) => {
+    setReplacingId(id);
+    replaceInputRef.current?.click();
+  };
+
+  const handleReplaceFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || replacingId == null) return;
+    if (file.size > 16 * 1024 * 1024) {
+      toast.error("Arquivo muito grande (máx. 16MB)");
+      return;
+    }
+    const id = replacingId;
+    setReplacingId(null);
+    try {
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        headers: {
+          "Content-Type": file.type,
+          "X-File-Name": encodeURIComponent(file.name),
+          "X-User-Id": String(user?.id || ""),
+        },
+        body: file,
+      });
+      if (!response.ok) throw new Error("upload failed");
+      const data = await response.json();
+      await replaceFileMutation.mutateAsync({
+        id,
+        fileKey: data.key,
+        fileUrl: data.url,
+        fileName: file.name,
+        fileSize: file.size,
+        mimeType: file.type,
+      });
+    } catch {
+      toast.error("Erro ao reenviar arquivo");
+    }
+  };
+
   const handleExport = () => {
     if (!documents || documents.length === 0) {
       toast.error("Nenhum documento para exportar");
@@ -445,7 +491,12 @@ export default function Documentos() {
         </div>
         <div className="min-w-0">
           <p className="text-sm font-medium truncate">{doc.title}</p>
-          <div className="flex items-center gap-2 mt-0.5">
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+            {!doc.hasFile && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-500/40 text-amber-400 gap-1">
+                <AlertTriangle className="h-2.5 w-2.5" /> Arquivo ausente — reenviar
+              </Badge>
+            )}
             <span className="text-xs text-muted-foreground">{formatDate(doc.createdAt)}</span>
             <span className="text-xs text-muted-foreground">·</span>
             <span className="text-xs text-muted-foreground">{formatFileSize(doc.fileSize)}</span>
@@ -479,6 +530,11 @@ export default function Documentos() {
         </div>
       </div>
       <div className="flex items-center gap-2 shrink-0">
+        {!doc.hasFile && (
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-amber-400 hover:text-amber-300" onClick={() => startReplace(doc.id)} title="Reenviar arquivo">
+            <Upload className="h-3.5 w-3.5" />
+          </Button>
+        )}
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setViewing(doc)} title="Visualizar">
           <Eye className="h-3.5 w-3.5" />
         </Button>
@@ -499,6 +555,7 @@ export default function Documentos() {
 
   return (
     <div className="space-y-6">
+      <input ref={replaceInputRef} type="file" className="hidden" onChange={handleReplaceFile} />
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Cofre Digital</h1>
         <p className="text-muted-foreground text-sm mt-1">Documentos seguros e organizados</p>
