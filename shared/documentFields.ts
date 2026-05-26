@@ -32,8 +32,11 @@ const paymentFields: DocField[] = [
   { key: "taxaJuros", label: "Taxa de juros (% a.m.)", showWhen: FINANCIAMENTO },
   // Recurso próprio
   { key: "meioPagamento", label: "Meio de pagamento", options: ["PIX", "TED", "Boleto", "Cartão"], showWhen: RECURSO },
+  { key: "cartaoData", label: "Data da compra no cartão", showWhen: CARTAO },
   { key: "cartaoModalidade", label: "Cartão: à vista ou parcelado", options: ["À vista", "Parcelado"], showWhen: CARTAO },
+  { key: "cartaoValor", label: "Valor pago no cartão", showWhen: CARTAO },
   { key: "cartaoParcelas", label: "Cartão: nº de parcelas", showWhen: [...CARTAO, { field: "cartaoModalidade", value: "Parcelado" }] },
+  { key: "cartaoValorParcela", label: "Valor da parcela (automático)", showWhen: [...CARTAO, { field: "cartaoModalidade", value: "Parcelado" }] },
   { key: "cartaoBandeira", label: "Cartão: bandeira", options: ["Visa", "Mastercard", "Elo", "Amex", "Hipercard", "Outro"], showWhen: CARTAO },
   { key: "cartaoFinal", label: "Cartão: números finais", showWhen: CARTAO },
   { key: "cartaoTitular", label: "Titular do cartão (nome)", showWhen: CARTAO },

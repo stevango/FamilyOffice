@@ -118,6 +118,15 @@ function parseMetadata(doc: { metadata?: string | null; category: string }): { l
 
 // ---- Input masks (CPF/CNPJ, telefone, data) ----
 const onlyDigits = (s: string) => s.replace(/\D/g, "");
+function parseBRLNum(v?: string): number {
+  if (!v) return 0;
+  const n = v.replace(/[^\d,.-]/g, "").replace(/\./g, "").replace(",", ".");
+  const f = parseFloat(n);
+  return Number.isFinite(f) ? f : 0;
+}
+function formatBRL(n: number): string {
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
 function maskCpf(v: string): string {
   const d = onlyDigits(v).slice(0, 11);
   if (d.length > 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
@@ -153,7 +162,7 @@ function maskValue(key: string, value: string): string {
   if (k.endsWith("cnpj")) return maskCnpj(value);
   if (k.endsWith("cpf")) return maskCpf(value);
   if (k.includes("telefone") || k.includes("celular") || k.includes("fone")) return maskPhone(value);
-  if (k.startsWith("data") || k === "validade" || k === "vigencia" || k === "primeirahabilitacao") return maskDate(value);
+  if (k.includes("data") || k === "validade" || k === "vigencia" || k === "primeirahabilitacao") return maskDate(value);
   return value;
 }
 
@@ -884,6 +893,25 @@ export default function Documentos() {
     const enc = computeEncerramento(editMeta.dataAdesao, editMeta.parcelas);
     if (enc && enc !== editMeta.dataEncerramento) setEditMeta((p) => ({ ...p, dataEncerramento: enc }));
   }, [editForm.category, editMeta.dataAdesao, editMeta.parcelas, editMeta.dataEncerramento]);
+
+  // Card installment value = total paid on card / number of installments.
+  useEffect(() => {
+    if (metaForm.cartaoModalidade !== "Parcelado") return;
+    const val = parseBRLNum(metaForm.cartaoValor);
+    const n = parseInt((metaForm.cartaoParcelas ?? "").replace(/\D/g, ""), 10);
+    if (!val || !n) return;
+    const parcela = formatBRL(val / n);
+    if (parcela !== metaForm.cartaoValorParcela) setMetaForm((p) => ({ ...p, cartaoValorParcela: parcela }));
+  }, [metaForm.cartaoValor, metaForm.cartaoParcelas, metaForm.cartaoModalidade, metaForm.cartaoValorParcela]);
+
+  useEffect(() => {
+    if (editMeta.cartaoModalidade !== "Parcelado") return;
+    const val = parseBRLNum(editMeta.cartaoValor);
+    const n = parseInt((editMeta.cartaoParcelas ?? "").replace(/\D/g, ""), 10);
+    if (!val || !n) return;
+    const parcela = formatBRL(val / n);
+    if (parcela !== editMeta.cartaoValorParcela) setEditMeta((p) => ({ ...p, cartaoValorParcela: parcela }));
+  }, [editMeta.cartaoValor, editMeta.cartaoParcelas, editMeta.cartaoModalidade, editMeta.cartaoValorParcela]);
 
   return (
     <div className="space-y-6">
