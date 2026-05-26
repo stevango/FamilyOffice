@@ -1,4 +1,5 @@
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { CATEGORY_LABELS, fieldsForCategory } from "@shared/documentFields";
 import { INTEGRATIONS, INTEGRATION_IDS } from "@shared/integrations";
 import { TRPCError } from "@trpc/server";
 import type { Application, Request, Response } from "express";
@@ -78,6 +79,19 @@ async function buildHouseholdContext(householdId: number): Promise<string> {
     `Total de documentos: ${docs.length} (${cats})`,
     `Próximos vencimentos/prazos: ${prazos}`,
   ].join("\n");
+}
+
+/** Render a document's saved fields as text, for AI analysis when the file
+ *  itself has no readable text (scanned image, etc.). */
+function metadataToText(doc: { title: string; category: string; metadata?: string | null }): string {
+  let meta: Record<string, string> = {};
+  try { meta = doc.metadata ? JSON.parse(doc.metadata) : {}; } catch { /* ignore */ }
+  const fields = fieldsForCategory(doc.category);
+  const lines = Object.entries(meta)
+    .filter(([, v]) => v)
+    .map(([k, v]) => `${fields.find((f) => f.key === k)?.label ?? k}: ${v}`);
+  if (lines.length === 0) return "";
+  return `Documento "${doc.title}" (categoria: ${CATEGORY_LABELS[doc.category] ?? doc.category}).\nDados informados pelo usuário:\n${lines.join("\n")}`;
 }
 
 /** Parse a Brazilian currency string ("R$ 1.234,56") to a number. */
@@ -573,9 +587,13 @@ export const appRouter = router({
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configure um Consultor IA (Claude ou OpenAI) em Integrações." });
       }
       const buffer = await storageReadBuffer(doc.fileKey).catch(() => null);
-      if (!buffer) throw new TRPCError({ code: "NOT_FOUND", message: "Arquivo não encontrado." });
-      const text = await extractText(buffer, doc.mimeType ?? undefined);
-      if (!text) throw new TRPCError({ code: "UNPROCESSABLE_CONTENT", message: "Não consegui ler texto deste arquivo (imagem sem texto ou ilegível)." });
+      // Prefer the file's text; if it can't be read, fall back to the fields
+      // the user already filled in the form.
+      let text = buffer ? await extractText(buffer, doc.mimeType ?? undefined) : "";
+      if (!text) text = metadataToText(doc);
+      if (!text) {
+        throw new TRPCError({ code: "UNPROCESSABLE_CONTENT", message: "Não consegui ler o arquivo e não há dados preenchidos para analisar." });
+      }
       try {
         const summary = await summarizeDocument({ provider: ai.provider, apiKey: ai.apiKey, text, title: doc.title, category: doc.category });
         await db.updateDocument(doc.id, ctx.user.householdId, { aiSummary: JSON.stringify(summary) } as any);
