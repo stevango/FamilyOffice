@@ -162,8 +162,10 @@ function MetaFieldsBlock({
   aiPending?: boolean;
   aiAvailable?: boolean;
 }) {
-  const fields = fieldsForCategory(category);
-  if (fields.length === 0) return null;
+  const fields = fieldsForCategory(category).filter(
+    (f) => !f.showWhen || meta[f.showWhen.field] === f.showWhen.value,
+  );
+  if (fieldsForCategory(category).length === 0) return null;
   return (
     <div className="space-y-3 rounded-lg border border-border/60 p-3">
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
