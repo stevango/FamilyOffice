@@ -110,3 +110,22 @@ export const CATEGORY_FIELDS: Record<string, DocField[]> = {
 export function fieldsForCategory(category: string): DocField[] {
   return CATEGORY_FIELDS[category] ?? [];
 }
+
+/** Human labels for each category (pt-BR), shared by UI and AI prompts. */
+export const CATEGORY_LABELS: Record<string, string> = {
+  personal: "Pessoal",
+  cnh: "CNH (habilitação)",
+  property: "Imóvel",
+  vehicle: "Veículo",
+  company: "Empresa",
+  legal: "Jurídico/Processo",
+  tax: "Fiscal",
+  ir: "Imposto de Renda",
+  insurance: "Seguro",
+  contract: "Contrato",
+  consorcio: "Consórcio",
+  certificate: "Certidão",
+  finance: "Finanças",
+  studies: "Estudos",
+  other: "Outro",
+};

@@ -33,6 +33,7 @@ import {
   Package,
   Download,
   User,
+  Coins,
 } from "lucide-react";
 import { toast } from "sonner";
 import { downloadCsv } from "@/lib/export";
@@ -52,6 +53,7 @@ const assetTypeLabels: Record<string, string> = {
   vehicle: "Veículo",
   company: "Empresa",
   investment: "Investimento",
+  consorcio: "Consórcio",
   other: "Outro",
 };
 
@@ -60,6 +62,7 @@ const assetTypeIcons: Record<string, any> = {
   vehicle: Car,
   company: Briefcase,
   investment: TrendingUp,
+  consorcio: Coins,
   other: Package,
 };
 
@@ -106,7 +109,7 @@ export default function Patrimonio() {
 
   const [form, setForm] = useState({
     name: "",
-    assetType: "property" as "property" | "vehicle" | "company" | "investment" | "other",
+    assetType: "property" as "property" | "vehicle" | "company" | "investment" | "consorcio" | "other",
     description: "",
     estimatedValue: "",
     acquisitionValue: "",
@@ -192,6 +195,7 @@ export default function Patrimonio() {
             <TabsTrigger value="vehicle">Veículos</TabsTrigger>
             <TabsTrigger value="company">Empresas</TabsTrigger>
             <TabsTrigger value="investment">Investimentos</TabsTrigger>
+            <TabsTrigger value="consorcio">Consórcios</TabsTrigger>
           </TabsList>
         </Tabs>
 
@@ -224,6 +228,7 @@ export default function Patrimonio() {
                       <SelectItem value="vehicle">Veículo</SelectItem>
                       <SelectItem value="company">Empresa</SelectItem>
                       <SelectItem value="investment">Investimento</SelectItem>
+                      <SelectItem value="consorcio">Consórcio</SelectItem>
                       <SelectItem value="other">Outro</SelectItem>
                     </SelectContent>
                   </Select>

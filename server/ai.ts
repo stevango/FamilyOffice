@@ -7,6 +7,7 @@
  * triggers an analysis and only if an Anthropic key is configured.
  */
 import { ExternalLookupError } from "./lookup";
+import { CATEGORY_FIELDS, CATEGORY_LABELS, fieldsForCategory } from "@shared/documentFields";
 
 export type AiProvider = "claude" | "openai";
 
@@ -111,6 +112,98 @@ async function callAi(opts: {
   } catch (err) {
     if (err instanceof ExternalLookupError) throw err;
     throw new ExternalLookupError("Não foi possível falar com a IA (sem acesso ao serviço).");
+  }
+}
+
+/** Use the LLM to extract a category's structured fields from a document. */
+export async function aiExtractFields(opts: {
+  provider: AiProvider;
+  apiKey: string;
+  text: string;
+  category: string;
+}): Promise<Record<string, string>> {
+  const fields = fieldsForCategory(opts.category);
+  if (fields.length === 0) return {};
+  const fieldList = fields.map((f) => `"${f.key}" (${f.label})`).join(", ");
+  const trimmed = opts.text.length > MAX_INPUT_CHARS ? opts.text.slice(0, MAX_INPUT_CHARS) : opts.text;
+  const user = [
+    `Extraia do documento abaixo os campos: ${fieldList}.`,
+    'Responda SOMENTE com um objeto JSON {"chave": "valor"} usando exatamente as chaves em inglês listadas.',
+    "Omita os campos que não encontrar — não invente. Valores monetários como \"R$ 1.234,56\"; datas como dd/mm/aaaa.",
+    "",
+    "Documento:",
+    '"""',
+    trimmed,
+    '"""',
+  ].join("\n");
+  const out = await callAi({
+    provider: opts.provider,
+    apiKey: opts.apiKey,
+    system: "Você extrai dados estruturados de documentos brasileiros. Responda apenas com JSON válido.",
+    messages: [{ role: "user", content: user }],
+    maxTokens: 800,
+  });
+  const match = out.match(/\{[\s\S]*\}/);
+  if (!match) return {};
+  try {
+    const obj = JSON.parse(match[0]) as Record<string, unknown>;
+    const allowed = new Set(fields.map((f) => f.key));
+    const result: Record<string, string> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (allowed.has(k) && v != null && String(v).trim()) result[k] = String(v).trim();
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+/** Use the LLM to both classify the document's category and extract its fields. */
+export async function aiClassifyAndExtract(opts: {
+  provider: AiProvider;
+  apiKey: string;
+  text: string;
+}): Promise<{ category: string; fields: Record<string, string> }> {
+  const catLines = Object.keys(CATEGORY_FIELDS)
+    .map((key) => {
+      const fs = CATEGORY_FIELDS[key].map((f) => f.key).join(", ") || "—";
+      return `- ${key} = ${CATEGORY_LABELS[key] ?? key} [campos: ${fs}]`;
+    })
+    .join("\n");
+  const trimmed = opts.text.length > MAX_INPUT_CHARS ? opts.text.slice(0, MAX_INPUT_CHARS) : opts.text;
+  const user = [
+    "Classifique o documento em UMA categoria (use a chave em inglês) e extraia os campos daquela categoria.",
+    "Categorias disponíveis:",
+    catLines,
+    "",
+    'Responda SOMENTE com JSON: {"category":"<chave>","fields":{"campo":"valor"}}.',
+    "Omita campos não encontrados — não invente. Datas como dd/mm/aaaa; valores como \"R$ 1.234,56\".",
+    "",
+    "Documento:",
+    '"""',
+    trimmed,
+    '"""',
+  ].join("\n");
+  const out = await callAi({
+    provider: opts.provider,
+    apiKey: opts.apiKey,
+    system: "Você classifica e extrai dados de documentos brasileiros. Responda apenas com JSON válido.",
+    messages: [{ role: "user", content: user }],
+    maxTokens: 900,
+  });
+  const match = out.match(/\{[\s\S]*\}/);
+  if (!match) return { category: "other", fields: {} };
+  try {
+    const obj = JSON.parse(match[0]) as { category?: string; fields?: Record<string, unknown> };
+    const category = obj.category && CATEGORY_FIELDS[obj.category] ? obj.category : "other";
+    const allowed = new Set(fieldsForCategory(category).map((f) => f.key));
+    const fields: Record<string, string> = {};
+    for (const [k, v] of Object.entries(obj.fields ?? {})) {
+      if (allowed.has(k) && v != null && String(v).trim()) fields[k] = String(v).trim();
+    }
+    return { category, fields };
+  } catch {
+    return { category: "other", fields: {} };
   }
 }
 

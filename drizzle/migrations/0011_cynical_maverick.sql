@@ -1,0 +1,1 @@
+ALTER TABLE `assets` MODIFY COLUMN `assetType` enum('property','vehicle','company','investment','consorcio','other') NOT NULL;

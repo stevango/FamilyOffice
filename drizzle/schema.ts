@@ -164,7 +164,7 @@ export const assets = mysqlTable("assets", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
   name: varchar("name", { length: 500 }).notNull(),
-  assetType: mysqlEnum("assetType", ["property", "vehicle", "company", "investment", "other"]).notNull(),
+  assetType: mysqlEnum("assetType", ["property", "vehicle", "company", "investment", "consorcio", "other"]).notNull(),
   description: text("description"),
   estimatedValue: decimal("estimatedValue", { precision: 15, scale: 2 }).notNull(),
   acquisitionValue: decimal("acquisitionValue", { precision: 15, scale: 2 }),

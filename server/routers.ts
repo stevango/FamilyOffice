@@ -17,7 +17,7 @@ import {
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router, writeProcedure } from "./_core/trpc";
 import * as db from "./db";
-import { chatAssistant, summarizeDocument, verifyAiKey, type AiProvider } from "./ai";
+import { aiClassifyAndExtract, aiExtractFields, chatAssistant, summarizeDocument, verifyAiKey, type AiProvider } from "./ai";
 import { lookupCep } from "./cep";
 import { lookupCnpj } from "./cnpj";
 import { decryptSecret, encryptSecret, secretHint } from "./crypto";
@@ -502,6 +502,47 @@ export const appRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: err instanceof Error ? err.message : "Falha na análise de IA." });
       }
     }),
+    /** Use AI to read a document and fill the category's structured fields
+     *  (and, when classify is set, detect the category too). */
+    aiExtract: writeProcedure.input(z.object({
+      category: z.string(),
+      classify: z.boolean().optional(),
+      id: z.number().optional(),
+      fileKey: z.string().optional(),
+      mimeType: z.string().optional(),
+    })).mutation(async ({ ctx, input }) => {
+      let buffer: Buffer | null = null;
+      let mime = input.mimeType;
+      if (input.id != null) {
+        const doc = await db.getDocumentById(ctx.user.householdId, input.id);
+        if (!doc) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado." });
+        buffer = await storageReadBuffer(doc.fileKey).catch(() => null);
+        mime = doc.mimeType ?? undefined;
+      } else if (input.fileKey) {
+        if (!input.fileKey.startsWith(`${ctx.user.id}/`)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Arquivo inválido." });
+        }
+        buffer = await storageReadBuffer(input.fileKey).catch(() => null);
+      } else {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Informe o documento." });
+      }
+      if (!buffer) throw new TRPCError({ code: "NOT_FOUND", message: "Arquivo não encontrado." });
+      const ai = await resolveAi(ctx.user.householdId);
+      if (!ai) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configure um Consultor IA (Claude ou OpenAI) em Integrações." });
+      }
+      const text = await extractText(buffer, mime);
+      if (!text) throw new TRPCError({ code: "UNPROCESSABLE_CONTENT", message: "Não consegui ler texto deste arquivo (imagem sem texto ou ilegível)." });
+      try {
+        if (input.classify) {
+          return await aiClassifyAndExtract({ provider: ai.provider, apiKey: ai.apiKey, text });
+        }
+        const fields = await aiExtractFields({ provider: ai.provider, apiKey: ai.apiKey, text, category: input.category });
+        return { category: input.category, fields };
+      } catch (err) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: err instanceof Error ? err.message : "Falha na extração por IA." });
+      }
+    }),
     /** Look up official company data by CNPJ (public Receita data via BrasilAPI). */
     lookupCnpj: writeProcedure.input(z.object({ cnpj: z.string() })).mutation(async ({ input }) => {
       try {
@@ -588,7 +629,7 @@ export const appRouter = router({
     }).optional()).query(async ({ ctx, input }) => db.getAssets(ctx.user.householdId, input?.assetType)),
     create: writeProcedure.input(z.object({
       name: z.string().min(1),
-      assetType: z.enum(["property", "vehicle", "company", "investment", "other"]),
+      assetType: z.enum(["property", "vehicle", "company", "investment", "consorcio", "other"]),
       description: z.string().optional(),
       estimatedValue: z.string(),
       acquisitionValue: z.string().optional(),
@@ -602,7 +643,7 @@ export const appRouter = router({
     update: writeProcedure.input(z.object({
       id: z.number(),
       name: z.string().min(1).optional(),
-      assetType: z.enum(["property", "vehicle", "company", "investment", "other"]).optional(),
+      assetType: z.enum(["property", "vehicle", "company", "investment", "consorcio", "other"]).optional(),
       description: z.string().optional(),
       estimatedValue: z.string().optional(),
       acquisitionValue: z.string().optional(),

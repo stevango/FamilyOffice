@@ -78,6 +78,13 @@
       "when": 1779806575205,
       "tag": "0010_damp_hobgoblin",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1779810345106,
+      "tag": "0011_cynical_maverick",
+      "breakpoints": true
     }
   ]
 }

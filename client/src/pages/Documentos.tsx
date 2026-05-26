@@ -122,7 +122,7 @@ function consorcioProgress(doc: { category: string; metadata?: string | null }):
 
 /** Editable per-category fields, shared by the create and edit dialogs. */
 function MetaFieldsBlock({
-  category, meta, setMeta, analyzing, onLookupCnpj, onLookupCep, lookupPending,
+  category, meta, setMeta, analyzing, onLookupCnpj, onLookupCep, lookupPending, onAiFill, aiPending, aiAvailable,
 }: {
   category: string;
   meta: Record<string, string>;
@@ -131,6 +131,9 @@ function MetaFieldsBlock({
   onLookupCnpj: () => void;
   onLookupCep: () => void;
   lookupPending: boolean;
+  onAiFill?: () => void;
+  aiPending?: boolean;
+  aiAvailable?: boolean;
 }) {
   const fields = fieldsForCategory(category);
   if (fields.length === 0) return null;
@@ -143,6 +146,12 @@ function MetaFieldsBlock({
           <><Sparkles className="h-3.5 w-3.5 text-primary" /> Dados do documento (preenchidos automaticamente quando possível)</>
         )}
       </div>
+      {aiAvailable && onAiFill && (
+        <Button type="button" variant="outline" size="sm" className="gap-2" onClick={onAiFill} disabled={aiPending}>
+          {aiPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bot className="h-3.5 w-3.5 text-primary" />}
+          IA: ler documento e preencher campos
+        </Button>
+      )}
       {category === "company" && (
         <Button type="button" variant="outline" size="sm" className="gap-2" onClick={onLookupCnpj} disabled={lookupPending}>
           {lookupPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
@@ -296,6 +305,42 @@ export default function Documentos() {
   const [analyzing, setAnalyzing] = useState(false);
 
   const analyzeMutation = trpc.documents.analyze.useMutation({ onError: () => {} });
+  const aiExtractMutation = trpc.documents.aiExtract.useMutation();
+  const { data: aiCfg } = trpc.ai.configured.useQuery();
+
+  // Fill only the still-empty fields, keeping anything already typed/detected.
+  const fillEmpty = (
+    setMeta: (updater: (prev: Record<string, string>) => Record<string, string>) => void,
+    fields: Record<string, string>,
+  ) => {
+    setMeta((prev) => {
+      const next = { ...prev };
+      for (const [k, v] of Object.entries(fields)) if (!next[k]?.trim()) next[k] = v;
+      return next;
+    });
+  };
+
+  const runAiFill = async (
+    args: { id?: number; fileKey?: string; mimeType?: string; category: string; classify?: boolean },
+    setMeta: (updater: (prev: Record<string, string>) => Record<string, string>) => void,
+    onCategory?: (cat: string) => void,
+  ) => {
+    try {
+      const res = await aiExtractMutation.mutateAsync(args);
+      if (onCategory && res.category) onCategory(res.category);
+      const filled = Object.keys(res.fields).length;
+      fillEmpty(setMeta, res.fields);
+      if (args.classify && res.category) {
+        toast.success(`IA: categoria "${categoryLabels[res.category] ?? res.category}" e ${filled} campo(s)`);
+      } else if (filled > 0) {
+        toast.success("Campos preenchidos pela IA");
+      } else {
+        toast.message("A IA não encontrou novos campos");
+      }
+    } catch (err: any) {
+      toast.error(err?.message ?? "Falha na extração por IA");
+    }
+  };
 
   const runAnalyze = async (fileKey: string, mimeType: string, category: string) => {
     if (fieldsForCategory(category).length === 0) return;
@@ -706,6 +751,13 @@ export default function Documentos() {
                 onLookupCnpj={() => runCnpjLookup(metaForm.cnpj ?? "", (f) => setMetaForm((p) => ({ ...p, ...f })))}
                 onLookupCep={() => runCepLookup(metaForm.cep ?? "", (f) => setMetaForm((p) => ({ ...p, ...f })))}
                 lookupPending={lookupCnpjMutation.isPending || lookupCepMutation.isPending}
+                aiAvailable={!!aiCfg?.configured && !!uploadedFile}
+                aiPending={aiExtractMutation.isPending}
+                onAiFill={() => uploadedFile && runAiFill(
+                  { fileKey: uploadedFile.key, mimeType: uploadedFile.mimeType, category: form.category, classify: true },
+                  setMetaForm,
+                  (cat) => setForm((p) => ({ ...p, category: cat })),
+                )}
               />
 
               <div className="space-y-2">
@@ -821,6 +873,9 @@ export default function Documentos() {
               onLookupCnpj={() => runCnpjLookup(editMeta.cnpj ?? "", (f) => setEditMeta((p) => ({ ...p, ...f })))}
               onLookupCep={() => runCepLookup(editMeta.cep ?? "", (f) => setEditMeta((p) => ({ ...p, ...f })))}
               lookupPending={lookupCnpjMutation.isPending || lookupCepMutation.isPending}
+              aiAvailable={!!aiCfg?.configured && editingId != null}
+              aiPending={aiExtractMutation.isPending}
+              onAiFill={() => editingId != null && runAiFill({ id: editingId, category: editForm.category }, setEditMeta)}
             />
 
             <div className="flex flex-wrap gap-2">
