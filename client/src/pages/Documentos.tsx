@@ -211,6 +211,18 @@ function MetaFieldsBlock({
                 className="h-9"
               />
             )}
+            {f.key === "dataEncerramento" && (
+              <button
+                type="button"
+                onClick={() => setMeta((prev) => {
+                  const enc = computeEncerramento(prev.dataAdesao, prev.parcelas);
+                  return enc ? { ...prev, dataEncerramento: enc } : prev;
+                })}
+                className="text-[10px] text-primary hover:underline"
+              >
+                Recalcular a partir da adesão + parcelas
+              </button>
+            )}
           </div>
         ))}
       </div>
