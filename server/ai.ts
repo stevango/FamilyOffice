@@ -64,6 +64,21 @@ export function parseSummary(modelText: string): DocumentSummary {
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
+/** Build a friendly, specific error from a failed provider response. */
+async function aiError(res: Response, provider: string): Promise<ExternalLookupError> {
+  if (res.status === 401 || res.status === 403) {
+    return new ExternalLookupError(`Chave da ${provider} inválida ou sem permissão.`);
+  }
+  const body = await res.text().catch(() => "");
+  let detail = "";
+  try { detail = (JSON.parse(body)?.error?.message as string) || ""; } catch { detail = body; }
+  detail = (detail || "").replace(/\s+/g, " ").trim().slice(0, 160);
+  if (res.status === 429) {
+    return new ExternalLookupError(`Cota/limite da ${provider} atingido — verifique créditos e billing na conta.${detail ? " " + detail : ""}`);
+  }
+  return new ExternalLookupError(`IA indisponível (${provider} ${res.status})${detail ? ": " + detail : ""}.`);
+}
+
 async function callClaude(apiKey: string, system: string, messages: ChatMessage[], maxTokens: number): Promise<string> {
   const res = await fetch(ANTHROPIC_URL, {
     method: "POST",
@@ -71,8 +86,7 @@ async function callClaude(apiKey: string, system: string, messages: ChatMessage[
     headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
     body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: maxTokens, system, messages }),
   });
-  if (res.status === 401 || res.status === 403) throw new ExternalLookupError("Chave da Anthropic inválida ou sem permissão.");
-  if (!res.ok) throw new ExternalLookupError("Serviço de IA indisponível no momento.");
+  if (!res.ok) throw await aiError(res, "Anthropic");
   const data = await res.json();
   return Array.isArray(data?.content) ? data.content.filter((b: any) => b?.type === "text").map((b: any) => b.text).join("\n") : "";
 }
@@ -88,8 +102,7 @@ async function callOpenai(apiKey: string, system: string, messages: ChatMessage[
       messages: [{ role: "system", content: system }, ...messages],
     }),
   });
-  if (res.status === 401 || res.status === 403) throw new ExternalLookupError("Chave da OpenAI inválida ou sem permissão.");
-  if (!res.ok) throw new ExternalLookupError("Serviço de IA indisponível no momento.");
+  if (!res.ok) throw await aiError(res, "OpenAI");
   const data = await res.json();
   return data?.choices?.[0]?.message?.content ?? "";
 }
@@ -207,18 +220,29 @@ export async function aiClassifyAndExtract(opts: {
   }
 }
 
-/** Validate an AI key with a cheap GET /models call. Throws on failure. */
+/** Validate an AI key with a tiny real generation (catches key, quota and
+ *  model issues — i.e. exactly what the actual features need). */
 export async function verifyAiKey(provider: AiProvider, apiKey: string): Promise<void> {
-  const url = provider === "openai" ? "https://api.openai.com/v1/models" : "https://api.anthropic.com/v1/models";
-  const headers: Record<string, string> = provider === "openai"
-    ? { Authorization: `Bearer ${apiKey}` }
-    : { "x-api-key": apiKey, "anthropic-version": "2023-06-01" };
-  const res = await fetch(url, { method: "GET", headers, signal: AbortSignal.timeout(15_000) }).catch(() => null);
-  if (!res) throw new ExternalLookupError("Sem acesso ao serviço de IA (verifique a rede/egress do ambiente).");
-  if (res.status === 401 || res.status === 403) {
-    throw new ExternalLookupError(provider === "openai" ? "Chave da OpenAI inválida ou sem permissão." : "Chave da Anthropic inválida ou sem permissão.");
+  const name = provider === "openai" ? "OpenAI" : "Anthropic";
+  let res: Response;
+  try {
+    res = provider === "openai"
+      ? await fetch(OPENAI_URL, {
+          method: "POST",
+          signal: AbortSignal.timeout(20_000),
+          headers: { Authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+          body: JSON.stringify({ model: OPENAI_MODEL, max_tokens: 5, messages: [{ role: "user", content: "ping" }] }),
+        })
+      : await fetch(ANTHROPIC_URL, {
+          method: "POST",
+          signal: AbortSignal.timeout(20_000),
+          headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+          body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: 5, messages: [{ role: "user", content: "ping" }] }),
+        });
+  } catch {
+    throw new ExternalLookupError("Sem acesso ao serviço de IA (verifique a rede/egress do ambiente).");
   }
-  if (!res.ok) throw new ExternalLookupError("Serviço de IA indisponível no momento.");
+  if (!res.ok) throw await aiError(res, name);
 }
 
 export async function summarizeDocument(opts: {
