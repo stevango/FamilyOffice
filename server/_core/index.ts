@@ -52,7 +52,9 @@ async function runMigrations(): Promise<void> {
 function securityHeaders(): express.RequestHandler {
   return (_req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("X-Frame-Options", "DENY");
+    // SAMEORIGIN (not DENY) so the in-app document viewer can iframe our own
+    // /api/files resources, while still blocking cross-origin framing.
+    res.setHeader("X-Frame-Options", "SAMEORIGIN");
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
     res.setHeader("X-DNS-Prefetch-Control", "off");
     next();
