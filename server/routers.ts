@@ -507,7 +507,7 @@ export const appRouter = router({
     /** Aggregate active consórcio contracts (from documents) for the leverage view. */
     consorcioLeverage: protectedProcedure.query(async ({ ctx }) => {
       const docs = await db.getDocuments(ctx.user.householdId, undefined, "consorcio");
-      const items: Array<{ id: number; title: string; administradora: string; tipo: string; valorParcela: number; diaVencimento: string; credito: number; situacao: string; pago: number; total: number; pct: number }> = [];
+      const items: Array<{ id: number; title: string; fileUrl: string; metadata: Record<string, string>; administradora: string; tipo: string; valorParcela: number; diaVencimento: string; credito: number; situacao: string; pago: number; total: number; pct: number }> = [];
       let totalCredito = 0, totalPago = 0, totalAPagar = 0, totalComprometido = 0;
       for (const doc of docs) {
         let meta: Record<string, string> = {};
@@ -529,6 +529,8 @@ export const appRouter = router({
         items.push({
           id: doc.id,
           title: doc.title,
+          fileUrl: doc.fileUrl,
+          metadata: meta,
           administradora: meta.administradora ?? "",
           tipo: meta.tipo ?? "",
           valorParcela,

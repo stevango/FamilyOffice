@@ -775,6 +775,17 @@ export default function Documentos() {
     </div>
   );
 
+  // Deep link: /documentos?open=<id> opens that document's viewer once loaded.
+  useEffect(() => {
+    if (!documents) return;
+    const params = new URLSearchParams(window.location.search);
+    const openId = params.get("open");
+    if (!openId) return;
+    const doc = (documents as any[]).find((d) => String(d.id) === openId);
+    if (doc) setViewing(doc);
+    window.history.replaceState(null, "", window.location.pathname);
+  }, [documents]);
+
   // Auto-fill the consórcio end date from adesão + total installments.
   useEffect(() => {
     if (form.category !== "consorcio") return;

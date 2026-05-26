@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { fieldsForCategory } from "@shared/documentFields";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +37,7 @@ import {
   User,
   Coins,
   ArrowRightLeft,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import { downloadCsv } from "@/lib/export";
@@ -89,6 +92,8 @@ export default function Patrimonio() {
   );
   const { data: summary } = trpc.assets.summary.useQuery();
   const { data: consorcio } = trpc.documents.consorcioLeverage.useQuery();
+  const [, setLocation] = useLocation();
+  const [detail, setDetail] = useState<any | null>(null);
 
   const createMutation = trpc.assets.create.useMutation({
     onSuccess: () => {
@@ -308,7 +313,12 @@ export default function Patrimonio() {
                   it.diaVencimento ? `venc. dia ${it.diaVencimento}` : null,
                 ].filter(Boolean).join(" · ");
                 return (
-                  <div key={it.id} className="flex items-center justify-between gap-3 text-xs">
+                  <button
+                    key={it.id}
+                    type="button"
+                    onClick={() => setDetail(it)}
+                    className="flex w-full items-center justify-between gap-3 text-xs text-left rounded-md px-1.5 py-1 -mx-1.5 hover:bg-accent/40 transition-colors"
+                  >
                     <span className="min-w-0">
                       <span className="block truncate text-muted-foreground">{it.administradora || it.title}</span>
                       {sub && <span className="block text-[10px] text-muted-foreground/70">{sub}</span>}
@@ -318,7 +328,7 @@ export default function Patrimonio() {
                       <Badge variant="outline" className="text-[10px] px-1.5 py-0">{it.situacao}</Badge>
                       <span className="text-muted-foreground w-9 text-right">{it.pct}%</span>
                     </span>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -544,6 +554,43 @@ export default function Patrimonio() {
               Para manter só a carta, feche esta janela — nada muda.
             </p>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Detalhe do consórcio */}
+      <Dialog open={detail != null} onOpenChange={(v) => { if (!v) setDetail(null); }}>
+        <DialogContent className="bg-card border-border sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="truncate pr-8">{detail?.administradora || detail?.title}</DialogTitle>
+          </DialogHeader>
+          {detail && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                {fieldsForCategory("consorcio")
+                  .filter((f) => detail.metadata?.[f.key])
+                  .map((f) => (
+                    <div key={f.key} className="min-w-0">
+                      <p className="text-[10px] text-muted-foreground/70">{f.label}</p>
+                      <p className="text-sm truncate">{detail.metadata[f.key]}</p>
+                    </div>
+                  ))}
+              </div>
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
+                <Button
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => { const id = detail.id; setDetail(null); setLocation(`/documentos?open=${id}`); }}
+                >
+                  <FileText className="h-4 w-4" /> Ver no Cofre Digital
+                </Button>
+                <Button variant="outline" size="sm" className="gap-2" asChild>
+                  <a href={detail.fileUrl} target="_blank" rel="noopener noreferrer">
+                    <Download className="h-4 w-4" /> Abrir arquivo
+                  </a>
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
