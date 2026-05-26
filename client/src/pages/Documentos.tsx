@@ -105,6 +105,21 @@ function parseMetadata(doc: { metadata?: string | null; category: string }): { l
   }
 }
 
+/** For a consórcio doc, a "paid X/Y (NN%)" progress string, when known. */
+function consorcioProgress(doc: { category: string; metadata?: string | null }): { label: string; pct: number } | null {
+  if (doc.category !== "consorcio" || !doc.metadata) return null;
+  try {
+    const m = JSON.parse(doc.metadata) as Record<string, string>;
+    const total = parseInt(String(m.parcelas ?? "").replace(/\D/g, ""), 10);
+    const pagas = parseInt(String(m.parcelasPagas ?? "").replace(/\D/g, ""), 10);
+    if (!total || Number.isNaN(pagas)) return null;
+    const pct = Math.min(100, Math.round((pagas / total) * 100));
+    return { label: `${pagas}/${total} parcelas pagas (${pct}%)`, pct };
+  } catch {
+    return null;
+  }
+}
+
 /** Editable per-category fields, shared by the create and edit dialogs. */
 function MetaFieldsBlock({
   category, meta, setMeta, analyzing, onLookupCnpj, onLookupCep, lookupPending,
@@ -529,6 +544,20 @@ export default function Documentos() {
               ))}
             </div>
           )}
+          {(() => {
+            const p = consorcioProgress(doc);
+            if (!p) return null;
+            return (
+              <div className="mt-1.5 max-w-xs">
+                <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-0.5">
+                  <span>{p.label}</span>
+                </div>
+                <div className="h-1.5 w-full rounded-full bg-secondary/60 overflow-hidden">
+                  <div className="h-full rounded-full bg-sky-500" style={{ width: `${p.pct}%` }} />
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
       <div className="flex items-center gap-2 shrink-0">

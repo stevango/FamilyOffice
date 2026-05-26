@@ -78,9 +78,12 @@ export const CATEGORY_FIELDS: Record<string, DocField[]> = {
     { key: "grupo", label: "Grupo" },
     { key: "cota", label: "Cota" },
     { key: "parcelas", label: "Parcelas (total)" },
+    { key: "parcelasPagas", label: "Parcelas pagas" },
     { key: "valorParcela", label: "Valor da parcela" },
     { key: "valorCredito", label: "Valor do crédito" },
-    { key: "contemplacao", label: "Contemplação" },
+    { key: "dataAdesao", label: "Data de adesão" },
+    { key: "situacao", label: "Situação (contemplado/em dia/quitado)" },
+    { key: "lance", label: "Lance" },
   ],
   certificate: [
     { key: "numero", label: "Número" },
