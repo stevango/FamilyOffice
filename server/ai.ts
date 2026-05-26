@@ -114,6 +114,20 @@ async function callAi(opts: {
   }
 }
 
+/** Validate an AI key with a cheap GET /models call. Throws on failure. */
+export async function verifyAiKey(provider: AiProvider, apiKey: string): Promise<void> {
+  const url = provider === "openai" ? "https://api.openai.com/v1/models" : "https://api.anthropic.com/v1/models";
+  const headers: Record<string, string> = provider === "openai"
+    ? { Authorization: `Bearer ${apiKey}` }
+    : { "x-api-key": apiKey, "anthropic-version": "2023-06-01" };
+  const res = await fetch(url, { method: "GET", headers, signal: AbortSignal.timeout(15_000) }).catch(() => null);
+  if (!res) throw new ExternalLookupError("Sem acesso ao serviço de IA (verifique a rede/egress do ambiente).");
+  if (res.status === 401 || res.status === 403) {
+    throw new ExternalLookupError(provider === "openai" ? "Chave da OpenAI inválida ou sem permissão." : "Chave da Anthropic inválida ou sem permissão.");
+  }
+  if (!res.ok) throw new ExternalLookupError("Serviço de IA indisponível no momento.");
+}
+
 export async function summarizeDocument(opts: {
   provider: AiProvider;
   apiKey: string;

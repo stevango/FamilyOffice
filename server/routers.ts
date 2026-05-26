@@ -17,7 +17,7 @@ import {
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router, writeProcedure } from "./_core/trpc";
 import * as db from "./db";
-import { chatAssistant, summarizeDocument, type AiProvider } from "./ai";
+import { chatAssistant, summarizeDocument, verifyAiKey, type AiProvider } from "./ai";
 import { lookupCep } from "./cep";
 import { lookupCnpj } from "./cnpj";
 import { decryptSecret, encryptSecret, secretHint } from "./crypto";
@@ -676,6 +676,25 @@ export const appRouter = router({
       if (input.enabled !== undefined) data.enabled = input.enabled ? 1 : 0;
       await db.upsertIntegration(ctx.user.householdId, input.provider, data);
       return { success: true };
+    }),
+    /** Test that stored credentials actually work (AI providers). */
+    test: adminProcedure.input(z.object({ provider: z.enum(INTEGRATION_IDS) })).mutation(async ({ ctx, input }) => {
+      const row = await db.getIntegration(ctx.user.householdId, input.provider);
+      if (!row?.credentials) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configure as credenciais primeiro." });
+      }
+      if (input.provider !== "claude" && input.provider !== "openai") {
+        throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "Teste de conexão não disponível para este provedor." });
+      }
+      try {
+        await verifyAiKey(input.provider, decryptSecret(row.credentials));
+        await db.upsertIntegration(ctx.user.householdId, input.provider, { status: "connected", lastError: null, lastSyncAt: new Date() });
+        return { ok: true };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Falha no teste de conexão.";
+        await db.upsertIntegration(ctx.user.householdId, input.provider, { status: "error", lastError: message });
+        throw new TRPCError({ code: "BAD_REQUEST", message });
+      }
     }),
     /** Remove stored credentials and disable the provider. */
     disconnect: adminProcedure.input(z.object({ provider: z.enum(INTEGRATION_IDS) })).mutation(async ({ ctx, input }) => {

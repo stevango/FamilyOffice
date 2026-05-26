@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader2, Plug, ShieldAlert, Save, Unplug, RefreshCw } from "lucide-react";
+import { Loader2, Plug, ShieldAlert, Save, Unplug, RefreshCw, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -34,6 +34,10 @@ export default function Integracoes() {
   const syncMutation = trpc.integrations.sync.useMutation({
     onSuccess: (res) => { utils.integrations.list.invalidate(); toast.success(`Sincronizado: ${res.imported} registro(s)`); },
     onError: (err) => { utils.integrations.list.invalidate(); toast.message(err.message); },
+  });
+  const testMutation = trpc.integrations.test.useMutation({
+    onSuccess: () => { utils.integrations.list.invalidate(); toast.success("Conexão OK — chave válida"); },
+    onError: (err) => { utils.integrations.list.invalidate(); toast.error(err.message); },
   });
 
   const saveKey = async (provider: string) => {
@@ -132,6 +136,26 @@ export default function Integracoes() {
                       )}
                     </div>
                   </div>
+
+                  {it.configured && it.supportsTest && (
+                    <div className="flex items-center gap-3 pt-1">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="gap-2"
+                        onClick={() => testMutation.mutate({ provider: it.id as any })}
+                        disabled={testMutation.isPending}
+                      >
+                        {testMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+                        Testar conexão
+                      </Button>
+                      {it.status === "connected" && it.lastSyncAt && (
+                        <span className="text-xs text-emerald-400">
+                          Verificado em {new Date(it.lastSyncAt).toLocaleString("pt-BR")}
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   {it.configured && it.supportsSync && (
                     <div className="flex items-center justify-between gap-2 pt-1">

@@ -13,6 +13,8 @@ export interface IntegrationMeta {
   docsUrl?: string;
   /** Whether the provider exposes a manual "sync now" action. */
   supportsSync?: boolean;
+  /** Whether the provider supports a "test connection" check. */
+  supportsTest?: boolean;
 }
 
 export const INTEGRATIONS: IntegrationMeta[] = [
@@ -32,6 +34,7 @@ export const INTEGRATIONS: IntegrationMeta[] = [
     feeds: "Documentos / Assistente",
     credentialLabel: "API Key (Anthropic)",
     docsUrl: "https://docs.anthropic.com/en/api/overview",
+    supportsTest: true,
   },
   {
     id: "openai",
@@ -40,6 +43,7 @@ export const INTEGRATIONS: IntegrationMeta[] = [
     feeds: "Documentos / Assistente",
     credentialLabel: "API Key (OpenAI)",
     docsUrl: "https://platform.openai.com/docs/api-reference",
+    supportsTest: true,
   },
 ];
 
