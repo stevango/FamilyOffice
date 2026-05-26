@@ -17,7 +17,7 @@ import {
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router, writeProcedure } from "./_core/trpc";
 import * as db from "./db";
-import { summarizeDocument } from "./ai";
+import { chatWithClaude, summarizeDocument } from "./ai";
 import { lookupCep } from "./cep";
 import { lookupCnpj } from "./cnpj";
 import { decryptSecret, encryptSecret, secretHint } from "./crypto";
@@ -49,6 +49,24 @@ function clientIp(req: Request): string {
   const fwd = req.headers["x-forwarded-for"];
   if (typeof fwd === "string") return fwd.split(",")[0]!.trim();
   return req.socket.remoteAddress ?? "unknown";
+}
+
+/** Compact, token-light snapshot of the household for the AI assistant. */
+async function buildHouseholdContext(householdId: number): Promise<string> {
+  const [household, alerts, docs] = await Promise.all([
+    db.getHousehold(householdId),
+    db.getAlerts(householdId, 60),
+    db.getDocuments(householdId),
+  ]);
+  const byCat: Record<string, number> = {};
+  docs.forEach((d) => { byCat[d.category] = (byCat[d.category] || 0) + 1; });
+  const cats = Object.entries(byCat).map(([c, n]) => `${c}: ${n}`).join(", ") || "nenhum";
+  const prazos = alerts.slice(0, 12).map((a) => `${a.title} — ${a.date}${a.overdue ? " (vencido)" : ""}`).join("; ") || "nenhum nos próximos 60 dias";
+  return [
+    `Família: ${household?.name ?? "—"}`,
+    `Total de documentos: ${docs.length} (${cats})`,
+    `Próximos vencimentos/prazos: ${prazos}`,
+  ].join("\n");
 }
 
 /** Add `n` months to an ISO date (YYYY-MM-DD), clamping to the month's last day. */
@@ -685,6 +703,35 @@ export const appRouter = router({
           status: pending ? "disconnected" : "error", lastError: message,
         });
         throw new TRPCError({ code: pending ? "NOT_IMPLEMENTED" : "BAD_REQUEST", message });
+      }
+    }),
+  }),
+
+  // ============ AI ASSISTANT (chat) ============
+  ai: router({
+    /** Whether the Claude key is configured (so the chat can prompt setup). */
+    configured: protectedProcedure.query(async ({ ctx }) => {
+      const i = await db.getIntegration(ctx.user.householdId, "claude");
+      return { configured: !!i?.credentials };
+    }),
+    /** Multi-turn chat with the family-office assistant (Claude). */
+    chat: protectedProcedure.input(z.object({
+      messages: z.array(z.object({
+        role: z.enum(["user", "assistant"]),
+        content: z.string().min(1).max(8000),
+      })).min(1).max(40),
+    })).mutation(async ({ ctx, input }) => {
+      const integration = await db.getIntegration(ctx.user.householdId, "claude");
+      if (!integration?.credentials) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configure o Consultor IA (Claude) em Integrações." });
+      }
+      const apiKey = decryptSecret(integration.credentials);
+      const context = await buildHouseholdContext(ctx.user.householdId);
+      try {
+        const reply = await chatWithClaude({ apiKey, context, messages: input.messages });
+        return { reply };
+      } catch (err) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: err instanceof Error ? err.message : "Falha no chat de IA." });
       }
     }),
   }),

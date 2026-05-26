@@ -32,6 +32,7 @@ import {
   Scale,
   Shield,
   Plug,
+  Bot,
   Users,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
@@ -44,6 +45,7 @@ const menuItems = [
   { icon: FileText, label: "Documentos", path: "/documentos" },
   { icon: Building2, label: "Patrimônio", path: "/patrimonio" },
   { icon: Scale, label: "Jurídico", path: "/juridico" },
+  { icon: Bot, label: "Assistente", path: "/assistente" },
   { icon: Users, label: "Família", path: "/familia" },
   { icon: Plug, label: "Integrações", path: "/integracoes", adminOnly: true },
 ];

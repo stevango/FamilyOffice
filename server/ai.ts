@@ -57,14 +57,17 @@ export function parseSummary(modelText: string): DocumentSummary {
   }
 }
 
-export async function summarizeDocument(opts: {
+export type ChatMessage = { role: "user" | "assistant"; content: string };
+
+/** Single call to Claude's Messages API. Returns the concatenated text output. */
+async function callClaude(opts: {
   apiKey: string;
-  text: string;
-  title: string;
-  category: string;
-}): Promise<DocumentSummary> {
+  system: string;
+  messages: ChatMessage[];
+  maxTokens?: number;
+}): Promise<string> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 30_000);
+  const timer = setTimeout(() => controller.abort(), 60_000);
   try {
     const res = await fetch(ANTHROPIC_URL, {
       method: "POST",
@@ -76,9 +79,9 @@ export async function summarizeDocument(opts: {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 1024,
-        system: "Você é um consultor jurídico-fiscal de um family office brasileiro. Seja objetivo e responda apenas com o JSON solicitado.",
-        messages: [{ role: "user", content: buildSummaryPrompt(opts.text, opts.title, opts.category) }],
+        max_tokens: opts.maxTokens ?? 1024,
+        system: opts.system,
+        messages: opts.messages,
       }),
     });
     if (res.status === 401 || res.status === 403) {
@@ -92,11 +95,42 @@ export async function summarizeDocument(opts: {
       ? data.content.filter((b: any) => b?.type === "text").map((b: any) => b.text).join("\n")
       : "";
     if (!textOut) throw new ExternalLookupError("A IA não retornou conteúdo.");
-    return parseSummary(textOut);
+    return textOut;
   } catch (err) {
     if (err instanceof ExternalLookupError) throw err;
-    throw new ExternalLookupError("Não foi possível concluir a análise de IA (sem acesso ao serviço).");
+    throw new ExternalLookupError("Não foi possível falar com a IA (sem acesso ao serviço).");
   } finally {
     clearTimeout(timer);
   }
+}
+
+export async function summarizeDocument(opts: {
+  apiKey: string;
+  text: string;
+  title: string;
+  category: string;
+}): Promise<DocumentSummary> {
+  const out = await callClaude({
+    apiKey: opts.apiKey,
+    system: "Você é um consultor jurídico-fiscal de um family office brasileiro. Seja objetivo e responda apenas com o JSON solicitado.",
+    messages: [{ role: "user", content: buildSummaryPrompt(opts.text, opts.title, opts.category) }],
+  });
+  return parseSummary(out);
+}
+
+/** Multi-turn chat with the family-office assistant. */
+export async function chatWithClaude(opts: {
+  apiKey: string;
+  context: string;
+  messages: ChatMessage[];
+}): Promise<string> {
+  const system = [
+    "Você é o assistente/consultor do family office da família. Responda em português do Brasil, de forma objetiva, prática e cordial.",
+    "Você ajuda com finanças pessoais, documentos, patrimônio, questões jurídicas e fiscais (incluindo Imposto de Renda).",
+    "Use o contexto abaixo quando for relevante. Não invente dados que não estão no contexto; se não tiver a informação, diga isso e oriente onde encontrar.",
+    "",
+    "Contexto atual da família:",
+    opts.context,
+  ].join("\n");
+  return callClaude({ apiKey: opts.apiKey, system, messages: opts.messages, maxTokens: 1500 });
 }
