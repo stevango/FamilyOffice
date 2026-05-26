@@ -6,6 +6,8 @@ export type DocField = {
   key: string;
   label: string;
   options?: string[];
+  /** Multi-select linking to other documents (e.g. "consorcio"). */
+  multi?: "consorcio";
   /** Only show this field when all listed conditions match (AND). */
   showWhen?: Array<{ field: string; value: string }>;
 };
@@ -29,6 +31,7 @@ export const CATEGORY_FIELDS: Record<string, DocField[]> = {
     { key: "dataEmissaoCrv", label: "Data de emissão do CRV", showWhen: [{ field: "tipoDocumento", value: "CRV" }] },
     { key: "valorCompra", label: "Valor da compra", showWhen: [{ field: "operacao", value: "Compra" }] },
     { key: "dataCompra", label: "Data da compra", showWhen: [{ field: "operacao", value: "Compra" }] },
+    { key: "consorciosVinculados", label: "Consórcio(s) utilizado(s) na compra", multi: "consorcio", showWhen: [{ field: "operacao", value: "Compra" }] },
     { key: "vendedorNome", label: "Vendedor (nome)", showWhen: [{ field: "operacao", value: "Compra" }] },
     { key: "vendedorTipoPessoa", label: "Vendedor: tipo de pessoa", options: ["Pessoa física", "Pessoa jurídica"], showWhen: [{ field: "operacao", value: "Compra" }] },
     { key: "vendedorCpf", label: "Vendedor: CPF", showWhen: [{ field: "operacao", value: "Compra" }, { field: "vendedorTipoPessoa", value: "Pessoa física" }] },

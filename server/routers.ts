@@ -507,9 +507,20 @@ export const appRouter = router({
     /** Aggregate active consórcio contracts (from documents) for the leverage view. */
     consorcioLeverage: protectedProcedure.query(async ({ ctx }) => {
       const docs = await db.getDocuments(ctx.user.householdId, undefined, "consorcio");
+      // Consórcios already linked to a vehicle purchase are "realized" — skip
+      // them so the credit isn't double-counted with the acquired asset.
+      const vehicleDocs = await db.getDocuments(ctx.user.householdId, undefined, "vehicle");
+      const linkedConsorcioIds = new Set<number>();
+      for (const v of vehicleDocs) {
+        try {
+          const vm = v.metadata ? JSON.parse(v.metadata) : {};
+          String(vm.consorciosVinculados ?? "").split(",").map((x: string) => parseInt(x, 10)).filter(Boolean).forEach((id: number) => linkedConsorcioIds.add(id));
+        } catch { /* ignore */ }
+      }
       const items: Array<{ id: number; title: string; fileUrl: string; metadata: Record<string, string>; administradora: string; tipo: string; valorParcela: number; diaVencimento: string; credito: number; situacao: string; pago: number; total: number; pct: number }> = [];
       let totalCredito = 0, totalPago = 0, totalAPagar = 0, totalComprometido = 0;
       for (const doc of docs) {
+        if (linkedConsorcioIds.has(doc.id)) continue; // já virou um bem (vinculado)
         let meta: Record<string, string> = {};
         try { meta = doc.metadata ? JSON.parse(doc.metadata) : {}; } catch { /* ignore */ }
         const situacao = (meta.situacao ?? "").trim();

@@ -109,7 +109,7 @@ function parseMetadata(doc: { metadata?: string | null; category: string }): { l
     const obj = JSON.parse(doc.metadata) as Record<string, string>;
     const fields = fieldsForCategory(doc.category);
     return Object.entries(obj)
-      .filter(([, v]) => v)
+      .filter(([k, v]) => v && k !== "consorciosVinculados")
       .map(([k, v]) => ({ label: fields.find((f) => f.key === k)?.label ?? k, value: String(v) }));
   } catch {
     return [];
@@ -155,7 +155,7 @@ function consorcioProgress(doc: { category: string; metadata?: string | null }):
 
 /** Editable per-category fields, shared by the create and edit dialogs. */
 function MetaFieldsBlock({
-  category, meta, setMeta, analyzing, onLookupCnpj, onLookupCep, lookupPending, onAiFill, aiPending, aiAvailable,
+  category, meta, setMeta, analyzing, onLookupCnpj, onLookupCep, lookupPending, onAiFill, aiPending, aiAvailable, linkOptions,
 }: {
   category: string;
   meta: Record<string, string>;
@@ -167,6 +167,7 @@ function MetaFieldsBlock({
   onAiFill?: () => void;
   aiPending?: boolean;
   aiAvailable?: boolean;
+  linkOptions?: Array<{ id: number; label: string }>;
 }) {
   const fields = fieldsForCategory(category).filter(
     (f) => !f.showWhen || f.showWhen.every((c) => meta[c.field] === c.value),
@@ -201,9 +202,33 @@ function MetaFieldsBlock({
       )}
       <div className="grid grid-cols-2 gap-x-4 gap-y-3">
         {fields.map((f) => (
-          <div key={f.key} className="space-y-1.5">
+          <div key={f.key} className={f.multi ? "space-y-1.5 col-span-2" : "space-y-1.5"}>
             <Label className="text-xs text-muted-foreground">{f.label}</Label>
-            {f.options ? (
+            {f.multi === "consorcio" ? (
+              (linkOptions ?? []).length === 0 ? (
+                <p className="text-xs text-muted-foreground">Nenhum consórcio cadastrado nos Documentos.</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {(linkOptions ?? []).map((opt) => {
+                    const active = (meta[f.key] ?? "").split(",").filter(Boolean).includes(String(opt.id));
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setMeta((prev) => {
+                          const cur = (prev[f.key] ?? "").split(",").filter(Boolean);
+                          const next = active ? cur.filter((x) => x !== String(opt.id)) : [...cur, String(opt.id)];
+                          return { ...prev, [f.key]: next.join(",") };
+                        })}
+                        className={`text-[11px] rounded-full border px-2 py-1 transition-colors ${active ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-accent/40"}`}
+                      >
+                        {active ? "✓ " : ""}{opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )
+            ) : f.options ? (
               <Select value={meta[f.key] ?? ""} onValueChange={(v) => setMeta((prev) => ({ ...prev, [f.key]: v }))}>
                 <SelectTrigger className="h-9"><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>
@@ -666,6 +691,17 @@ export default function Documentos() {
   (documents ?? []).forEach((d: any) => { (grouped[d.category] ??= []).push(d); });
   const orderedCats = Object.keys(categoryLabels).filter((c) => grouped[c]?.length);
 
+  const consorcioOptions = (documents ?? [])
+    .filter((d: any) => d.category === "consorcio")
+    .map((d: any) => {
+      let m: any = {};
+      try { m = d.metadata ? JSON.parse(d.metadata) : {}; } catch { /* ignore */ }
+      const parts = [m.administradora || d.title];
+      if (m.grupo) parts.push(`G${m.grupo}`);
+      if (m.valorCredito) parts.push(m.valorCredito);
+      return { id: d.id, label: parts.filter(Boolean).join(" · ") };
+    });
+
   const renderRow = (doc: any) => (
     <div key={doc.id} className="flex items-center justify-between px-4 py-3 hover:bg-accent/30 transition-colors">
       <div className="flex items-center gap-3 min-w-0">
@@ -928,6 +964,7 @@ export default function Documentos() {
                   setMetaForm,
                   (cat) => setForm((p) => ({ ...p, category: cat })),
                 )}
+                linkOptions={consorcioOptions}
               />
 
               <div className="space-y-2">
@@ -1055,6 +1092,7 @@ export default function Documentos() {
               aiAvailable={!!aiCfg?.configured && editingId != null}
               aiPending={aiExtractMutation.isPending}
               onAiFill={() => editingId != null && runAiFill({ id: editingId, category: editForm.category }, setEditMeta)}
+              linkOptions={consorcioOptions.filter((o) => o.id !== editingId)}
             />
 
             <div className="flex flex-wrap gap-2">
