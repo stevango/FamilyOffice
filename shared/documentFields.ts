@@ -80,6 +80,7 @@ export const CATEGORY_FIELDS: Record<string, DocField[]> = {
   ],
   consorcio: [
     { key: "administradora", label: "Administradora" },
+    { key: "numeroContrato", label: "Número do contrato" },
     { key: "tipo", label: "Tipo", options: ["Imóvel", "Veículo", "Serviços", "Moto", "Outro"] },
     { key: "consorciado", label: "Consorciado (nome)" },
     { key: "tipoPessoa", label: "Tipo de pessoa", options: ["Pessoa física", "Pessoa jurídica"] },
