@@ -506,15 +506,15 @@ export const appRouter = router({
     }).optional()).query(async ({ ctx, input }) => db.getDocuments(ctx.user.householdId, input?.search, input?.category, input?.memberId)),
     /** Aggregate active consórcio contracts (from documents) for the leverage view. */
     consorcioLeverage: protectedProcedure.query(async ({ ctx }) => {
-      const docs = await db.getDocuments(ctx.user.householdId, undefined, "consorcio");
-      // Consórcios already linked to a vehicle purchase are "realized" — skip
-      // them so the credit isn't double-counted with the acquired asset.
-      const vehicleDocs = await db.getDocuments(ctx.user.householdId, undefined, "vehicle");
+      const allDocs = await db.getDocuments(ctx.user.householdId);
+      const docs = allDocs.filter((d) => d.category === "consorcio");
+      // Consórcios linked to a purchase (vehicle/property/...) are "realized" —
+      // their credit became the asset, so they don't count toward leverage.
       const linkedConsorcioIds = new Set<number>();
-      for (const v of vehicleDocs) {
+      for (const d of allDocs) {
         try {
-          const vm = v.metadata ? JSON.parse(v.metadata) : {};
-          String(vm.consorciosVinculados ?? "").split(",").map((x: string) => parseInt(x, 10)).filter(Boolean).forEach((id: number) => linkedConsorcioIds.add(id));
+          const m = d.metadata ? JSON.parse(d.metadata) : {};
+          String(m.consorciosVinculados ?? "").split(",").map((x: string) => parseInt(x, 10)).filter(Boolean).forEach((id: number) => linkedConsorcioIds.add(id));
         } catch { /* ignore */ }
       }
       const items: Array<{ id: number; title: string; fileUrl: string; metadata: Record<string, string>; administradora: string; tipo: string; valorParcela: number; diaVencimento: string; credito: number; situacao: string; pago: number; total: number; pct: number; realizado: boolean }> = [];
