@@ -301,16 +301,26 @@ export default function Patrimonio() {
               </p>
             )}
             <div className="space-y-2 pt-2 border-t border-border">
-              {consorcio.items.map((it) => (
-                <div key={it.id} className="flex items-center justify-between gap-3 text-xs">
-                  <span className="truncate text-muted-foreground">{it.administradora || it.title}</span>
-                  <span className="flex items-center gap-2 shrink-0">
-                    <span className="font-medium">{formatCurrency(it.credito)}</span>
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">{it.situacao}</Badge>
-                    <span className="text-muted-foreground w-9 text-right">{it.pct}%</span>
-                  </span>
-                </div>
-              ))}
+              {consorcio.items.map((it) => {
+                const sub = [
+                  it.tipo,
+                  it.valorParcela > 0 ? `${formatCurrency(it.valorParcela)}/mês` : null,
+                  it.diaVencimento ? `venc. dia ${it.diaVencimento}` : null,
+                ].filter(Boolean).join(" · ");
+                return (
+                  <div key={it.id} className="flex items-center justify-between gap-3 text-xs">
+                    <span className="min-w-0">
+                      <span className="block truncate text-muted-foreground">{it.administradora || it.title}</span>
+                      {sub && <span className="block text-[10px] text-muted-foreground/70">{sub}</span>}
+                    </span>
+                    <span className="flex items-center gap-2 shrink-0">
+                      <span className="font-medium">{formatCurrency(it.credito)}</span>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">{it.situacao}</Badge>
+                      <span className="text-muted-foreground w-9 text-right">{it.pct}%</span>
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
