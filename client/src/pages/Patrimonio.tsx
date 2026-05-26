@@ -268,13 +268,16 @@ export default function Patrimonio() {
       )}
 
       {/* Alavancagem via consórcios (dos documentos) */}
-      {consorcio && consorcio.count > 0 && (
+      {consorcio && consorcio.items.length > 0 && (
         <Card className="bg-card border-border">
           <CardContent className="pt-4 space-y-4">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Coins className="h-4 w-4 text-sky-400" />
               <span className="text-sm text-muted-foreground">Alavancagem via consórcios</span>
               <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{consorcio.count} vigente(s)</Badge>
+              {consorcio.realizadoCount > 0 && (
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-emerald-400 border-emerald-500/40">{consorcio.realizadoCount} realizado(s)</Badge>
+              )}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
@@ -317,7 +320,7 @@ export default function Patrimonio() {
                     key={it.id}
                     type="button"
                     onClick={() => setDetail(it)}
-                    className="flex w-full items-center justify-between gap-3 text-xs text-left rounded-md px-1.5 py-1 -mx-1.5 hover:bg-accent/40 transition-colors"
+                    className={`flex w-full items-center justify-between gap-3 text-xs text-left rounded-md px-1.5 py-1 -mx-1.5 hover:bg-accent/40 transition-colors ${it.realizado ? "opacity-60" : ""}`}
                   >
                     <span className="min-w-0">
                       <span className="block truncate text-muted-foreground">{it.administradora || it.title}</span>
@@ -325,8 +328,12 @@ export default function Patrimonio() {
                     </span>
                     <span className="flex items-center gap-2 shrink-0">
                       <span className="font-medium">{formatCurrency(it.credito)}</span>
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">{it.situacao}</Badge>
-                      <span className="text-muted-foreground w-9 text-right">{it.pct}%</span>
+                      {it.realizado ? (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-emerald-400 border-emerald-500/40">Realizado</Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">{it.situacao}</Badge>
+                      )}
+                      <span className="text-muted-foreground w-9 text-right">{it.realizado ? "—" : `${it.pct}%`}</span>
                     </span>
                   </button>
                 );

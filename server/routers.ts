@@ -517,15 +517,15 @@ export const appRouter = router({
           String(vm.consorciosVinculados ?? "").split(",").map((x: string) => parseInt(x, 10)).filter(Boolean).forEach((id: number) => linkedConsorcioIds.add(id));
         } catch { /* ignore */ }
       }
-      const items: Array<{ id: number; title: string; fileUrl: string; metadata: Record<string, string>; administradora: string; tipo: string; valorParcela: number; diaVencimento: string; credito: number; situacao: string; pago: number; total: number; pct: number }> = [];
+      const items: Array<{ id: number; title: string; fileUrl: string; metadata: Record<string, string>; administradora: string; tipo: string; valorParcela: number; diaVencimento: string; credito: number; situacao: string; pago: number; total: number; pct: number; realizado: boolean }> = [];
       let totalCredito = 0, totalPago = 0, totalAPagar = 0, totalComprometido = 0;
       for (const doc of docs) {
-        if (linkedConsorcioIds.has(doc.id)) continue; // já virou um bem (vinculado)
         let meta: Record<string, string> = {};
         try { meta = doc.metadata ? JSON.parse(doc.metadata) : {}; } catch { /* ignore */ }
         const situacao = (meta.situacao ?? "").trim();
         const low = situacao.toLowerCase();
-        if (low.includes("quitad") || low.includes("cancel")) continue; // só vigentes
+        if (low.includes("quitad") || low.includes("cancel")) continue; // só vigentes/realizados
+        const realizado = linkedConsorcioIds.has(doc.id); // já virou um bem
         const credito = parseBRL(meta.valorCredito);
         const valorParcela = parseBRL(meta.valorParcela);
         const parcelas = parseInt((meta.parcelas ?? "").replace(/\D/g, ""), 10) || 0;
@@ -533,10 +533,13 @@ export const appRouter = router({
         const total = valorParcela * parcelas;
         const pago = valorParcela * Math.min(pagas, parcelas || pagas);
         const aPagar = Math.max(0, total - pago);
-        totalCredito += credito;
-        totalComprometido += total;
-        totalPago += pago;
-        totalAPagar += aPagar;
+        if (!realizado) {
+          // Realized consórcios don't count toward leverage (the credit became the asset).
+          totalCredito += credito;
+          totalComprometido += total;
+          totalPago += pago;
+          totalAPagar += aPagar;
+        }
         items.push({
           id: doc.id,
           title: doc.title,
@@ -551,10 +554,16 @@ export const appRouter = router({
           pago,
           total,
           pct: total > 0 ? Math.min(100, Math.round((pago / total) * 100)) : 0,
+          realizado,
         });
       }
-      items.sort((a, b) => b.credito - a.credito);
-      return { count: items.length, totalCredito, totalPago, totalAPagar, totalComprometido, items };
+      items.sort((a, b) => (a.realizado ? 1 : 0) - (b.realizado ? 1 : 0) || b.credito - a.credito);
+      return {
+        count: items.filter((i) => !i.realizado).length,
+        realizadoCount: items.filter((i) => i.realizado).length,
+        totalCredito, totalPago, totalAPagar, totalComprometido,
+        items,
+      };
     }),
     /** Best-effort local extraction of category fields from an uploaded file. */
     analyze: writeProcedure.input(z.object({
