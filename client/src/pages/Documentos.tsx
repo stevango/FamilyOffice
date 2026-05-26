@@ -161,6 +161,7 @@ export default function Documentos() {
   const [memberFilter, setMemberFilter] = useState<string>("all");
   const [open, setOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const utils = trpc.useUtils();
 
@@ -342,9 +343,7 @@ export default function Documentos() {
     setMetaForm({});
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const uploadFile = async (file: File) => {
     if (file.size > 16 * 1024 * 1024) {
       toast.error("Arquivo muito grande (máx. 16MB)");
       return;
@@ -379,6 +378,18 @@ export default function Documentos() {
     } finally {
       setUploading(false);
     }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) void uploadFile(file);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) void uploadFile(file);
   };
 
   const handleExport = () => {
@@ -544,8 +555,11 @@ export default function Documentos() {
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* File Upload Area */}
               <div
-                className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${isDragging ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}
                 onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); if (!isDragging) setIsDragging(true); }}
+                onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
+                onDrop={handleDrop}
               >
                 <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileUpload} />
                 {uploading ? (
@@ -562,7 +576,7 @@ export default function Documentos() {
                 ) : (
                   <div className="flex flex-col items-center gap-2">
                     <Upload className="h-8 w-8 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">Clique para selecionar um arquivo</p>
+                    <p className="text-sm text-muted-foreground">{isDragging ? "Solte o arquivo aqui" : "Clique para selecionar ou arraste um arquivo"}</p>
                     <p className="text-xs text-muted-foreground">PDF, imagens, documentos (máx. 16MB)</p>
                   </div>
                 )}
