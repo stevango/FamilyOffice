@@ -14,6 +14,34 @@ export type DocField = {
   showWhen?: Array<{ field: string; value: string }>;
 };
 
+// Payment-method chain for a purchase paid without a consórcio (shared by
+// vehicle and property). Shown when operação = Compra and usouConsorcio = Não.
+const COMPRA = { field: "operacao", value: "Compra" };
+const SEM_CONSORCIO = { field: "usouConsorcio", value: "Não" };
+const FINANCIAMENTO = [COMPRA, SEM_CONSORCIO, { field: "formaPagamento", value: "Financiamento" }];
+const RECURSO = [COMPRA, SEM_CONSORCIO, { field: "formaPagamento", value: "Recurso próprio" }];
+const CARTAO = [...RECURSO, { field: "meioPagamento", value: "Cartão" }];
+
+const paymentFields: DocField[] = [
+  { key: "formaPagamento", label: "Forma de pagamento", options: ["Financiamento", "Recurso próprio"], showWhen: [COMPRA, SEM_CONSORCIO] },
+  // Financiamento
+  { key: "financeira", label: "Financeira", showWhen: FINANCIAMENTO },
+  { key: "valorEntrada", label: "Valor da entrada", showWhen: FINANCIAMENTO },
+  { key: "parcelasFinanciamento", label: "Nº de parcelas", showWhen: FINANCIAMENTO },
+  { key: "valorParcelaFinanciamento", label: "Valor da parcela", showWhen: FINANCIAMENTO },
+  { key: "taxaJuros", label: "Taxa de juros (% a.m.)", showWhen: FINANCIAMENTO },
+  // Recurso próprio
+  { key: "meioPagamento", label: "Meio de pagamento", options: ["PIX", "TED", "Boleto", "Cartão"], showWhen: RECURSO },
+  { key: "cartaoModalidade", label: "Cartão: à vista ou parcelado", options: ["À vista", "Parcelado"], showWhen: CARTAO },
+  { key: "cartaoParcelas", label: "Cartão: nº de parcelas", showWhen: [...CARTAO, { field: "cartaoModalidade", value: "Parcelado" }] },
+  { key: "cartaoBandeira", label: "Cartão: bandeira", options: ["Visa", "Mastercard", "Elo", "Amex", "Hipercard", "Outro"], showWhen: CARTAO },
+  { key: "cartaoFinal", label: "Cartão: números finais", showWhen: CARTAO },
+  { key: "cartaoTitular", label: "Titular do cartão (nome)", showWhen: CARTAO },
+  { key: "cartaoTitularTipoPessoa", label: "Titular: tipo de pessoa", options: ["Pessoa física", "Pessoa jurídica"], showWhen: CARTAO },
+  { key: "cartaoTitularCpf", label: "Titular: CPF", showWhen: [...CARTAO, { field: "cartaoTitularTipoPessoa", value: "Pessoa física" }] },
+  { key: "cartaoTitularCnpj", label: "Titular: CNPJ", showWhen: [...CARTAO, { field: "cartaoTitularTipoPessoa", value: "Pessoa jurídica" }] },
+];
+
 export const CATEGORY_FIELDS: Record<string, DocField[]> = {
   vehicle: [
     { key: "tipoDocumento", label: "Tipo de documento", options: ["CRLV", "CRV"] },
@@ -45,6 +73,7 @@ export const CATEGORY_FIELDS: Record<string, DocField[]> = {
     { key: "vendedorCnpj", label: "Vendedor: CNPJ", showWhen: [{ field: "operacao", value: "Compra" }, { field: "vendedorTipoPessoa", value: "Pessoa jurídica" }] },
     { key: "valorVenda", label: "Valor da venda", showWhen: [{ field: "operacao", value: "Venda" }] },
     { key: "dataVenda", label: "Data da venda", showWhen: [{ field: "operacao", value: "Venda" }] },
+    ...paymentFields,
   ],
   property: [
     { key: "cep", label: "CEP" },
@@ -69,6 +98,7 @@ export const CATEGORY_FIELDS: Record<string, DocField[]> = {
     { key: "consorciosVinculados", label: "Cartas de consórcio utilizadas", multi: "consorcio", multiTipos: ["Imóvel"], showWhen: [{ field: "operacao", value: "Compra" }, { field: "usouConsorcio", value: "Sim" }] },
     { key: "valorVenda", label: "Valor da venda", showWhen: [{ field: "operacao", value: "Venda" }] },
     { key: "dataVenda", label: "Data da venda", showWhen: [{ field: "operacao", value: "Venda" }] },
+    ...paymentFields,
   ],
   personal: [
     { key: "cpf", label: "CPF" },

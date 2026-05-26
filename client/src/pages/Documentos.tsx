@@ -210,6 +210,7 @@ function MetaFieldsBlock({
   aiAvailable?: boolean;
   linkOptions?: Array<{ id: number; label: string; tipo: string }>;
 }) {
+  const [linkSearch, setLinkSearch] = useState("");
   const fields = fieldsForCategory(category).filter(
     (f) => !f.showWhen || f.showWhen.every((c) => meta[c.field] === c.value),
   );
@@ -247,11 +248,14 @@ function MetaFieldsBlock({
             <Label className="text-xs text-muted-foreground">{f.label}</Label>
             {f.multi === "consorcio" ? (
               (() => {
-                const opts = (linkOptions ?? []).filter((o) => !f.multiTipos || f.multiTipos.includes(o.tipo));
-                return opts.length === 0 ? (
+                const all = (linkOptions ?? []).filter((o) => !f.multiTipos || f.multiTipos.includes(o.tipo));
+                const opts = linkSearch.trim() ? all.filter((o) => o.label.toLowerCase().includes(linkSearch.trim().toLowerCase())) : all;
+                return all.length === 0 ? (
                   <p className="text-xs text-muted-foreground">Nenhuma carta de consórcio do tipo correspondente cadastrada.</p>
                 ) : (
-                <div className="flex flex-wrap gap-1.5">
+                <div className="space-y-1.5">
+                  <Input value={linkSearch} onChange={(e) => setLinkSearch(e.target.value)} placeholder="Buscar por nº do contrato, grupo..." className="h-8" />
+                  <div className="flex flex-wrap gap-1.5">
                   {opts.map((opt) => {
                     const active = (meta[f.key] ?? "").split(",").filter(Boolean).includes(String(opt.id));
                     return (
@@ -269,6 +273,7 @@ function MetaFieldsBlock({
                       </button>
                     );
                   })}
+                  </div>
                 </div>
                 );
               })()
@@ -741,6 +746,7 @@ export default function Documentos() {
       let m: any = {};
       try { m = d.metadata ? JSON.parse(d.metadata) : {}; } catch { /* ignore */ }
       const parts = [m.administradora || d.title];
+      if (m.numeroContrato) parts.push(`Nº ${m.numeroContrato}`);
       if (m.grupo) parts.push(`G${m.grupo}`);
       if (m.valorCredito) parts.push(m.valorCredito);
       return { id: d.id, label: parts.filter(Boolean).join(" · "), tipo: m.tipo || "" };

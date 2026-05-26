@@ -266,7 +266,8 @@ export async function getDocuments(householdId: number, search?: string, categor
     conditions.push(
       or(
         like(documents.title, `%${search}%`),
-        like(documents.tags, `%${search}%`)
+        like(documents.tags, `%${search}%`),
+        like(documents.metadata, `%${search}%`)
       )!
     );
   }
