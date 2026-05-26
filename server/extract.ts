@@ -103,6 +103,18 @@ function detectPrimeiraHabilitacao(text: string): string | undefined {
   return text.match(/(?:1[ªA°º.]?\s*|PRIMEIRA\s+)HABILITA[ÇC][ÃA]O[:\s]*(\d{2}\/\d{2}\/\d{4})/i)?.[1];
 }
 
+function detectGrupo(text: string): string | undefined {
+  return text.match(/\bGRUPO[:\s]*(\d{3,6})\b/i)?.[1];
+}
+
+function detectCota(text: string): string | undefined {
+  return text.match(/\bCOTA[:\s]*(\d{1,6})\b/i)?.[1];
+}
+
+function detectParcelas(text: string): string | undefined {
+  return text.match(/\b(\d{1,3})\s*PARCELAS\b/i)?.[1] ?? text.match(/\b(?:PRAZO|PARCELAS|N[º°.]?\s*PARCELAS)[:\s]*(\d{1,3})\b/i)?.[1];
+}
+
 /** Map raw OCR/PDF text to the structured fields of a category (best effort). */
 export function extractFields(text: string, category: string): Record<string, string> {
   const t = text.replace(/ /g, " ");
@@ -157,6 +169,12 @@ export function extractFields(text: string, category: string): Record<string, st
     case "contract":
       set("vigencia", detectFirstDate(t));
       set("valor", detectValor(t));
+      break;
+    case "consorcio":
+      set("grupo", detectGrupo(t));
+      set("cota", detectCota(t));
+      set("parcelas", detectParcelas(t));
+      set("valorParcela", detectValor(t));
       break;
     case "certificate":
       set("dataEmissao", detectFirstDate(t));

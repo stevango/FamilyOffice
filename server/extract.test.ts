@@ -75,6 +75,14 @@ describe("extractFields", () => {
     expect(f.cpfCnpj).toBe("12.345.678/0001-90");
   });
 
+  it("extracts consórcio fields", () => {
+    const f = extractFields("CONSORCIO PORTO SEGURO GRUPO 12345 COTA 678 PRAZO 80 PARCELAS VALOR DA PARCELA R$ 1.234,56", "consorcio");
+    expect(f.grupo).toBe("12345");
+    expect(f.cota).toBe("678");
+    expect(f.parcelas).toBe("80");
+    expect(f.valorParcela).toBe("R$ 1.234,56");
+  });
+
   it("returns nothing useful when there are no patterns", () => {
     expect(extractFields("documento sem dados estruturados", "vehicle")).toEqual({});
   });

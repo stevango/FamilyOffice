@@ -71,6 +71,13 @@
       "when": 1779803863735,
       "tag": "0009_abandoned_invaders",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1779806575205,
+      "tag": "0010_damp_hobgoblin",
+      "breakpoints": true
     }
   ]
 }

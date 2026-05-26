@@ -72,6 +72,16 @@ export const CATEGORY_FIELDS: Record<string, DocField[]> = {
     { key: "valor", label: "Valor" },
     { key: "vigencia", label: "Vigência" },
   ],
+  consorcio: [
+    { key: "administradora", label: "Administradora" },
+    { key: "tipo", label: "Tipo (imóvel/veículo/serviço)" },
+    { key: "grupo", label: "Grupo" },
+    { key: "cota", label: "Cota" },
+    { key: "parcelas", label: "Parcelas (total)" },
+    { key: "valorParcela", label: "Valor da parcela" },
+    { key: "valorCredito", label: "Valor do crédito" },
+    { key: "contemplacao", label: "Contemplação" },
+  ],
   certificate: [
     { key: "numero", label: "Número" },
     { key: "dataEmissao", label: "Data de emissão" },
