@@ -8,7 +8,7 @@ describe("extractFields", () => {
     expect(f.placa).toBe("ABC1D23");
     expect(f.renavam).toBe("12345678901");
     expect(f.chassi).toBe("9BWHE21JX24060831");
-    expect(f.ano).toBe("2022");
+    expect(f.anoFabricacao).toBe("2022");
   });
 
   it("normalizes an old-format plate with a separator", () => {

@@ -6,19 +6,35 @@ export type DocField = {
   key: string;
   label: string;
   options?: string[];
-  /** Only show this field when another field has a given value. */
-  showWhen?: { field: string; value: string };
+  /** Only show this field when all listed conditions match (AND). */
+  showWhen?: Array<{ field: string; value: string }>;
 };
 
 export const CATEGORY_FIELDS: Record<string, DocField[]> = {
   vehicle: [
+    { key: "tipoDocumento", label: "Tipo de documento", options: ["CRLV", "CRV"] },
+    { key: "operacao", label: "Operação", options: ["Compra", "Venda"], showWhen: [{ field: "tipoDocumento", value: "CRV" }] },
     { key: "placa", label: "Placa" },
     { key: "renavam", label: "RENAVAM" },
     { key: "chassi", label: "Chassi" },
     { key: "marcaModelo", label: "Marca/Modelo" },
-    { key: "ano", label: "Ano" },
+    { key: "anoFabricacao", label: "Ano fabricação" },
+    { key: "anoModelo", label: "Ano modelo" },
     { key: "cor", label: "Cor" },
+    { key: "combustivel", label: "Combustível", options: ["Gasolina", "Diesel", "Flex", "Elétrico", "Híbrido", "Plug-in", "Combustão"] },
+    { key: "hodometro", label: "Hodômetro (km)" },
     { key: "proprietario", label: "Proprietário" },
+    { key: "numeroCrv", label: "Número do CRV", showWhen: [{ field: "tipoDocumento", value: "CRV" }] },
+    { key: "codigoSegurancaCrv", label: "Código de segurança CRV", showWhen: [{ field: "tipoDocumento", value: "CRV" }] },
+    { key: "dataEmissaoCrv", label: "Data de emissão do CRV", showWhen: [{ field: "tipoDocumento", value: "CRV" }] },
+    { key: "valorCompra", label: "Valor da compra", showWhen: [{ field: "operacao", value: "Compra" }] },
+    { key: "dataCompra", label: "Data da compra", showWhen: [{ field: "operacao", value: "Compra" }] },
+    { key: "vendedorNome", label: "Vendedor (nome)", showWhen: [{ field: "operacao", value: "Compra" }] },
+    { key: "vendedorTipoPessoa", label: "Vendedor: tipo de pessoa", options: ["Pessoa física", "Pessoa jurídica"], showWhen: [{ field: "operacao", value: "Compra" }] },
+    { key: "vendedorCpf", label: "Vendedor: CPF", showWhen: [{ field: "operacao", value: "Compra" }, { field: "vendedorTipoPessoa", value: "Pessoa física" }] },
+    { key: "vendedorCnpj", label: "Vendedor: CNPJ", showWhen: [{ field: "operacao", value: "Compra" }, { field: "vendedorTipoPessoa", value: "Pessoa jurídica" }] },
+    { key: "valorVenda", label: "Valor da venda", showWhen: [{ field: "operacao", value: "Venda" }] },
+    { key: "dataVenda", label: "Data da venda", showWhen: [{ field: "operacao", value: "Venda" }] },
   ],
   property: [
     { key: "cep", label: "CEP" },
@@ -84,8 +100,8 @@ export const CATEGORY_FIELDS: Record<string, DocField[]> = {
     { key: "tipo", label: "Tipo", options: ["Imóvel", "Veículo", "Serviços", "Moto", "Outro"] },
     { key: "consorciado", label: "Consorciado (nome)" },
     { key: "tipoPessoa", label: "Tipo de pessoa", options: ["Pessoa física", "Pessoa jurídica"] },
-    { key: "cpf", label: "CPF", showWhen: { field: "tipoPessoa", value: "Pessoa física" } },
-    { key: "cnpj", label: "CNPJ", showWhen: { field: "tipoPessoa", value: "Pessoa jurídica" } },
+    { key: "cpf", label: "CPF", showWhen: [{ field: "tipoPessoa", value: "Pessoa física" }] },
+    { key: "cnpj", label: "CNPJ", showWhen: [{ field: "tipoPessoa", value: "Pessoa jurídica" }] },
     { key: "grupo", label: "Grupo" },
     { key: "cota", label: "Cota" },
     { key: "parcelas", label: "Parcelas (total)" },

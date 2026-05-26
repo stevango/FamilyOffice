@@ -169,7 +169,7 @@ function MetaFieldsBlock({
   aiAvailable?: boolean;
 }) {
   const fields = fieldsForCategory(category).filter(
-    (f) => !f.showWhen || meta[f.showWhen.field] === f.showWhen.value,
+    (f) => !f.showWhen || f.showWhen.every((c) => meta[c.field] === c.value),
   );
   if (fieldsForCategory(category).length === 0) return null;
   return (

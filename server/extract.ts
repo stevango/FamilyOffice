@@ -128,7 +128,7 @@ export function extractFields(text: string, category: string): Record<string, st
       set("placa", detectPlaca(t));
       set("renavam", detectRenavam(t));
       set("chassi", detectChassi(t));
-      set("ano", detectYear(t));
+      set("anoFabricacao", detectYear(t));
       break;
     case "personal":
       set("cpf", detectCpf(t));
