@@ -1,6 +1,6 @@
 /** Catalog of partner integrations, shared by client and server. */
 
-export type IntegrationProvider = "jusbrasil" | "claude";
+export type IntegrationProvider = "jusbrasil" | "claude" | "openai";
 
 export interface IntegrationMeta {
   id: IntegrationProvider;
@@ -29,9 +29,17 @@ export const INTEGRATIONS: IntegrationMeta[] = [
     id: "claude",
     name: "Consultor IA (Claude)",
     description: "Resumo inteligente de documentos e contratos, com alerta de relevância para o Imposto de Renda. O texto do documento é enviado à Anthropic apenas quando você solicita a análise.",
-    feeds: "Documentos",
+    feeds: "Documentos / Assistente",
     credentialLabel: "API Key (Anthropic)",
     docsUrl: "https://docs.anthropic.com/en/api/overview",
+  },
+  {
+    id: "openai",
+    name: "Consultor IA (OpenAI)",
+    description: "Alternativa de IA para resumo de documentos e chat do assistente. O texto é enviado à OpenAI apenas quando você solicita. Se ambas estiverem configuradas, o Claude é usado por padrão.",
+    feeds: "Documentos / Assistente",
+    credentialLabel: "API Key (OpenAI)",
+    docsUrl: "https://platform.openai.com/docs/api-reference",
   },
 ];
 

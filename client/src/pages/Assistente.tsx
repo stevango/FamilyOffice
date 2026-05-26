@@ -48,7 +48,7 @@ export default function Assistente() {
         <Card className="bg-card border-border">
           <CardContent className="flex items-center gap-3 py-6 text-sm text-muted-foreground">
             <Sparkles className="h-5 w-5 text-primary shrink-0" />
-            Configure a chave do Consultor IA (Claude) em <strong className="text-foreground">Integrações</strong> para usar o chat.
+            Configure uma chave de Consultor IA (Claude ou OpenAI) em <strong className="text-foreground">Integrações</strong> para usar o chat.
           </CardContent>
         </Card>
       )}

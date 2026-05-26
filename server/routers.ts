@@ -17,7 +17,7 @@ import {
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router, writeProcedure } from "./_core/trpc";
 import * as db from "./db";
-import { chatWithClaude, summarizeDocument } from "./ai";
+import { chatAssistant, summarizeDocument, type AiProvider } from "./ai";
 import { lookupCep } from "./cep";
 import { lookupCnpj } from "./cnpj";
 import { decryptSecret, encryptSecret, secretHint } from "./crypto";
@@ -49,6 +49,15 @@ function clientIp(req: Request): string {
   const fwd = req.headers["x-forwarded-for"];
   if (typeof fwd === "string") return fwd.split(",")[0]!.trim();
   return req.socket.remoteAddress ?? "unknown";
+}
+
+/** Resolve which AI provider to use: Claude takes priority, then OpenAI. */
+async function resolveAi(householdId: number): Promise<{ provider: AiProvider; apiKey: string } | null> {
+  const claude = await db.getIntegration(householdId, "claude");
+  if (claude?.credentials) return { provider: "claude", apiKey: decryptSecret(claude.credentials) };
+  const openai = await db.getIntegration(householdId, "openai");
+  if (openai?.credentials) return { provider: "openai", apiKey: decryptSecret(openai.credentials) };
+  return null;
 }
 
 /** Compact, token-light snapshot of the household for the AI assistant. */
@@ -473,17 +482,16 @@ export const appRouter = router({
     summarize: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
       const doc = await db.getDocumentById(ctx.user.householdId, input.id);
       if (!doc) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado." });
-      const integration = await db.getIntegration(ctx.user.householdId, "claude");
-      if (!integration?.credentials) {
-        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configure o Consultor IA (Claude) em Integrações." });
+      const ai = await resolveAi(ctx.user.householdId);
+      if (!ai) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configure um Consultor IA (Claude ou OpenAI) em Integrações." });
       }
       const buffer = await storageReadBuffer(doc.fileKey).catch(() => null);
       if (!buffer) throw new TRPCError({ code: "NOT_FOUND", message: "Arquivo não encontrado." });
       const text = await extractText(buffer, doc.mimeType ?? undefined);
       if (!text) throw new TRPCError({ code: "UNPROCESSABLE_CONTENT", message: "Não consegui ler texto deste arquivo (imagem sem texto ou ilegível)." });
       try {
-        const summary = await summarizeDocument({ apiKey: decryptSecret(integration.credentials), text, title: doc.title, category: doc.category });
-        return summary;
+        return await summarizeDocument({ provider: ai.provider, apiKey: ai.apiKey, text, title: doc.title, category: doc.category });
       } catch (err) {
         throw new TRPCError({ code: "BAD_REQUEST", message: err instanceof Error ? err.message : "Falha na análise de IA." });
       }
@@ -709,26 +717,24 @@ export const appRouter = router({
 
   // ============ AI ASSISTANT (chat) ============
   ai: router({
-    /** Whether the Claude key is configured (so the chat can prompt setup). */
+    /** Whether an AI provider key is configured (so the chat can prompt setup). */
     configured: protectedProcedure.query(async ({ ctx }) => {
-      const i = await db.getIntegration(ctx.user.householdId, "claude");
-      return { configured: !!i?.credentials };
+      return { configured: (await resolveAi(ctx.user.householdId)) != null };
     }),
-    /** Multi-turn chat with the family-office assistant (Claude). */
+    /** Multi-turn chat with the family-office assistant (Claude or OpenAI). */
     chat: protectedProcedure.input(z.object({
       messages: z.array(z.object({
         role: z.enum(["user", "assistant"]),
         content: z.string().min(1).max(8000),
       })).min(1).max(40),
     })).mutation(async ({ ctx, input }) => {
-      const integration = await db.getIntegration(ctx.user.householdId, "claude");
-      if (!integration?.credentials) {
-        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configure o Consultor IA (Claude) em Integrações." });
+      const ai = await resolveAi(ctx.user.householdId);
+      if (!ai) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configure um Consultor IA (Claude ou OpenAI) em Integrações." });
       }
-      const apiKey = decryptSecret(integration.credentials);
       const context = await buildHouseholdContext(ctx.user.householdId);
       try {
-        const reply = await chatWithClaude({ apiKey, context, messages: input.messages });
+        const reply = await chatAssistant({ provider: ai.provider, apiKey: ai.apiKey, context, messages: input.messages });
         return { reply };
       } catch (err) {
         throw new TRPCError({ code: "BAD_REQUEST", message: err instanceof Error ? err.message : "Falha no chat de IA." });

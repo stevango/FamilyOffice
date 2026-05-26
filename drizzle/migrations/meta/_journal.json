@@ -50,6 +50,13 @@
       "when": 1779758014161,
       "tag": "0006_blue_tarantula",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1779759183718,
+      "tag": "0007_fearless_talisman",
+      "breakpoints": true
     }
   ]
 }

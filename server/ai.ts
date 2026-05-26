@@ -8,8 +8,12 @@
  */
 import { ExternalLookupError } from "./lookup";
 
+export type AiProvider = "claude" | "openai";
+
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
-const MODEL = process.env.AI_MODEL ?? "claude-sonnet-4-6";
+const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
+const CLAUDE_MODEL = process.env.AI_MODEL ?? "claude-sonnet-4-6";
+const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
 const MAX_INPUT_CHARS = 12_000;
 
 export interface DocumentSummary {
@@ -59,58 +63,66 @@ export function parseSummary(modelText: string): DocumentSummary {
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
-/** Single call to Claude's Messages API. Returns the concatenated text output. */
-async function callClaude(opts: {
+async function callClaude(apiKey: string, system: string, messages: ChatMessage[], maxTokens: number): Promise<string> {
+  const res = await fetch(ANTHROPIC_URL, {
+    method: "POST",
+    signal: AbortSignal.timeout(60_000),
+    headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+    body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: maxTokens, system, messages }),
+  });
+  if (res.status === 401 || res.status === 403) throw new ExternalLookupError("Chave da Anthropic inválida ou sem permissão.");
+  if (!res.ok) throw new ExternalLookupError("Serviço de IA indisponível no momento.");
+  const data = await res.json();
+  return Array.isArray(data?.content) ? data.content.filter((b: any) => b?.type === "text").map((b: any) => b.text).join("\n") : "";
+}
+
+async function callOpenai(apiKey: string, system: string, messages: ChatMessage[], maxTokens: number): Promise<string> {
+  const res = await fetch(OPENAI_URL, {
+    method: "POST",
+    signal: AbortSignal.timeout(60_000),
+    headers: { Authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      max_tokens: maxTokens,
+      messages: [{ role: "system", content: system }, ...messages],
+    }),
+  });
+  if (res.status === 401 || res.status === 403) throw new ExternalLookupError("Chave da OpenAI inválida ou sem permissão.");
+  if (!res.ok) throw new ExternalLookupError("Serviço de IA indisponível no momento.");
+  const data = await res.json();
+  return data?.choices?.[0]?.message?.content ?? "";
+}
+
+/** Single AI call routed to the configured provider. Returns the text output. */
+async function callAi(opts: {
+  provider: AiProvider;
   apiKey: string;
   system: string;
   messages: ChatMessage[];
   maxTokens?: number;
 }): Promise<string> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 60_000);
   try {
-    const res = await fetch(ANTHROPIC_URL, {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        "x-api-key": opts.apiKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: opts.maxTokens ?? 1024,
-        system: opts.system,
-        messages: opts.messages,
-      }),
-    });
-    if (res.status === 401 || res.status === 403) {
-      throw new ExternalLookupError("Chave da Anthropic inválida ou sem permissão.");
-    }
-    if (!res.ok) {
-      throw new ExternalLookupError("Serviço de IA indisponível no momento.");
-    }
-    const data = await res.json();
-    const textOut = Array.isArray(data?.content)
-      ? data.content.filter((b: any) => b?.type === "text").map((b: any) => b.text).join("\n")
-      : "";
-    if (!textOut) throw new ExternalLookupError("A IA não retornou conteúdo.");
-    return textOut;
+    const max = opts.maxTokens ?? 1024;
+    const out = opts.provider === "openai"
+      ? await callOpenai(opts.apiKey, opts.system, opts.messages, max)
+      : await callClaude(opts.apiKey, opts.system, opts.messages, max);
+    if (!out) throw new ExternalLookupError("A IA não retornou conteúdo.");
+    return out;
   } catch (err) {
     if (err instanceof ExternalLookupError) throw err;
     throw new ExternalLookupError("Não foi possível falar com a IA (sem acesso ao serviço).");
-  } finally {
-    clearTimeout(timer);
   }
 }
 
 export async function summarizeDocument(opts: {
+  provider: AiProvider;
   apiKey: string;
   text: string;
   title: string;
   category: string;
 }): Promise<DocumentSummary> {
-  const out = await callClaude({
+  const out = await callAi({
+    provider: opts.provider,
     apiKey: opts.apiKey,
     system: "Você é um consultor jurídico-fiscal de um family office brasileiro. Seja objetivo e responda apenas com o JSON solicitado.",
     messages: [{ role: "user", content: buildSummaryPrompt(opts.text, opts.title, opts.category) }],
@@ -119,7 +131,8 @@ export async function summarizeDocument(opts: {
 }
 
 /** Multi-turn chat with the family-office assistant. */
-export async function chatWithClaude(opts: {
+export async function chatAssistant(opts: {
+  provider: AiProvider;
   apiKey: string;
   context: string;
   messages: ChatMessage[];
@@ -132,5 +145,5 @@ export async function chatWithClaude(opts: {
     "Contexto atual da família:",
     opts.context,
   ].join("\n");
-  return callClaude({ apiKey: opts.apiKey, system, messages: opts.messages, maxTokens: 1500 });
+  return callAi({ provider: opts.provider, apiKey: opts.apiKey, system, messages: opts.messages, maxTokens: 1500 });
 }

@@ -201,7 +201,7 @@ export type InsertLegalCase = typeof legalCases.$inferInsert;
 export const integrations = mysqlTable("integrations", {
   id: int("id").autoincrement().primaryKey(),
   householdId: int("householdId").notNull(),
-  provider: mysqlEnum("provider", ["jusbrasil", "claude"]).notNull(),
+  provider: mysqlEnum("provider", ["jusbrasil", "claude", "openai"]).notNull(),
   enabled: int("enabled").default(0).notNull(),
   credentials: text("credentials"),
   credentialHint: varchar("credentialHint", { length: 32 }),

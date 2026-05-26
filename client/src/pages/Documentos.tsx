@@ -37,7 +37,7 @@ import {
   Bot,
   AlertTriangle,
   CheckCircle2,
-  ChevronDown,
+  ChevronLeft,
   Eye,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -420,13 +420,7 @@ export default function Documentos() {
   };
 
   const [viewing, setViewing] = useState<any | null>(null);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const toggleCat = (cat: string) =>
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      next.has(cat) ? next.delete(cat) : next.add(cat);
-      return next;
-    });
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   const grouped: Record<string, any[]> = {};
   (documents ?? []).forEach((d: any) => { (grouped[d.category] ??= []).push(d); });
@@ -628,37 +622,57 @@ export default function Documentos() {
       {isLoading ? (
         <div className="space-y-3">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}</div>
       ) : documents && documents.length > 0 ? (
-        <div className="space-y-4">
-          {orderedCats.map((cat) => {
-            const docs = grouped[cat];
-            const isOpen = !collapsed.has(cat);
-            return (
-              <div key={cat}>
-                <button
-                  type="button"
-                  onClick={() => toggleCat(cat)}
-                  className="flex items-center gap-2 w-full text-left mb-2 px-1 focus:outline-none"
-                >
-                  <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isOpen ? "" : "-rotate-90"}`} />
-                  <span className={`h-6 w-6 rounded flex items-center justify-center shrink-0 ${categoryColors[cat] || categoryColors.other}`}>
-                    <FileText className="h-3.5 w-3.5" />
-                  </span>
-                  <span className="text-sm font-medium">{categoryLabels[cat] ?? cat}</span>
-                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{docs.length}</Badge>
-                </button>
-                {isOpen && (
-                  <Card className="bg-card border-border">
-                    <CardContent className="p-0">
-                      <div className="divide-y divide-border">
-                        {docs.map(renderRow)}
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        search.trim() ? (
+          // Busca ativa: resultados diretos, sem agrupar por categoria.
+          <Card className="bg-card border-border">
+            <CardContent className="p-0">
+              <div className="divide-y divide-border">{documents.map(renderRow)}</div>
+            </CardContent>
+          </Card>
+        ) : selectedCategory && grouped[selectedCategory]?.length ? (
+          // Dentro de uma categoria.
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={() => setSelectedCategory(null)}
+              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground focus:outline-none"
+            >
+              <ChevronLeft className="h-4 w-4" /> Voltar às categorias
+            </button>
+            <div className="flex items-center gap-2">
+              <span className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${categoryColors[selectedCategory] || categoryColors.other}`}>
+                <FileText className="h-4 w-4" />
+              </span>
+              <h2 className="text-lg font-semibold">{categoryLabels[selectedCategory] ?? selectedCategory}</h2>
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{grouped[selectedCategory].length}</Badge>
+            </div>
+            <Card className="bg-card border-border">
+              <CardContent className="p-0">
+                <div className="divide-y divide-border">{grouped[selectedCategory].map(renderRow)}</div>
+              </CardContent>
+            </Card>
+          </div>
+        ) : (
+          // Grade de cards por categoria.
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            {orderedCats.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setSelectedCategory(cat)}
+                className="flex items-center gap-3 rounded-lg border border-border bg-card p-4 text-left hover:bg-accent/30 hover:border-primary/40 transition-colors focus:outline-none"
+              >
+                <span className={`h-10 w-10 rounded-lg flex items-center justify-center shrink-0 ${categoryColors[cat] || categoryColors.other}`}>
+                  <FileText className="h-5 w-5" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{categoryLabels[cat] ?? cat}</p>
+                  <p className="text-xs text-muted-foreground">{grouped[cat].length} {grouped[cat].length === 1 ? "documento" : "documentos"}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )
       ) : (
         <Card className="bg-card border-border">
           <CardContent className="flex flex-col items-center justify-center py-16">
