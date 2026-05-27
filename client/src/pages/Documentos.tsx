@@ -46,6 +46,7 @@ import {
   Mail,
   Link2,
   Building2,
+  Landmark,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -205,6 +206,20 @@ export default function Documentos() {
       toast.success("Documento removido");
     },
   });
+
+  /** Toggle the "Comunicar ao contador (IR)" flag straight from the row. */
+  const toggleAccountant = (doc: any) => {
+    let cur: any = {};
+    try { if (doc.aiSummary) cur = JSON.parse(doc.aiSummary); } catch { /* ignore */ }
+    const next = {
+      resumo: cur.resumo ?? "",
+      pontos: Array.isArray(cur.pontos) ? cur.pontos : [],
+      irJustificativa: cur.irJustificativa ?? "",
+      comunicarContador: !(cur.comunicarContador === true),
+    };
+    updateMutation.mutate({ id: doc.id, aiSummary: JSON.stringify(next) } as any);
+    toast.success(next.comunicarContador ? "Marcado para o contador (IR)" : "Removido do contador (IR)");
+  };
 
   const updateMutation = trpc.documents.update.useMutation({
     onSuccess: () => {
@@ -741,6 +756,15 @@ export default function Documentos() {
             <Upload className="h-3.5 w-3.5" />
           </Button>
         )}
+        <Button
+          variant="ghost"
+          size="icon"
+          className={`h-8 w-8 ${needsAccountant(doc) ? "text-amber-400" : "text-muted-foreground"}`}
+          onClick={() => toggleAccountant(doc)}
+          title={needsAccountant(doc) ? "Marcado para o contador (IR) — clique para remover" : "Comunicar ao contador (IR)"}
+        >
+          <Landmark className="h-3.5 w-3.5" />
+        </Button>
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setViewing(doc)} title="Visualizar">
           <Eye className="h-3.5 w-3.5" />
         </Button>
