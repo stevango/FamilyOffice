@@ -110,7 +110,7 @@ function parseMetadata(doc: { metadata?: string | null; category: string }): { l
     const obj = JSON.parse(doc.metadata) as Record<string, string>;
     const fields = fieldsForCategory(doc.category);
     return Object.entries(obj)
-      .filter(([k, v]) => v && k !== "consorciosVinculados")
+      .filter(([k, v]) => v && !fields.find((f) => f.key === k)?.multi)
       .map(([k, v]) => ({ label: fields.find((f) => f.key === k)?.label ?? k, value: String(v) }));
   } catch {
     return [];
@@ -209,7 +209,7 @@ function MetaFieldsBlock({
   onAiFill?: () => void;
   aiPending?: boolean;
   aiAvailable?: boolean;
-  linkOptions?: Array<{ id: number; label: string; tipo: string }>;
+  linkOptions?: Record<string, Array<{ id: number; label: string; tipo: string }>>;
 }) {
   const [linkSearch, setLinkSearch] = useState("");
   const fields = fieldsForCategory(category).filter(
@@ -247,15 +247,15 @@ function MetaFieldsBlock({
         {fields.map((f) => (
           <div key={f.key} className={f.multi ? "space-y-1.5 col-span-2" : "space-y-1.5"}>
             <Label className="text-xs text-muted-foreground">{f.label}</Label>
-            {f.multi === "consorcio" ? (
+            {f.multi ? (
               (() => {
-                const all = (linkOptions ?? []).filter((o) => !f.multiTipos || f.multiTipos.includes(o.tipo));
+                const all = (linkOptions?.[f.multi] ?? []).filter((o) => !f.multiTipos || f.multiTipos.includes(o.tipo));
                 const opts = linkSearch.trim() ? all.filter((o) => o.label.toLowerCase().includes(linkSearch.trim().toLowerCase())) : all;
                 return all.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Nenhuma carta de consórcio do tipo correspondente cadastrada.</p>
+                  <p className="text-xs text-muted-foreground">{f.multi === "vehicle" ? "Nenhum veículo cadastrado." : "Nenhuma carta de consórcio do tipo correspondente cadastrada."}</p>
                 ) : (
                 <div className="space-y-1.5">
-                  <Input value={linkSearch} onChange={(e) => setLinkSearch(e.target.value)} placeholder="Buscar por nº do contrato, grupo..." className="h-8" />
+                  <Input value={linkSearch} onChange={(e) => setLinkSearch(e.target.value)} placeholder="Buscar..." className="h-8" />
                   <div className="flex flex-wrap gap-1.5">
                   {opts.map((opt) => {
                     const active = (meta[f.key] ?? "").split(",").filter(Boolean).includes(String(opt.id));
@@ -753,6 +753,15 @@ export default function Documentos() {
       return { id: d.id, label: parts.filter(Boolean).join(" · "), tipo: m.tipo || "" };
     });
 
+  const vehicleOptions = (documents ?? [])
+    .filter((d: any) => d.category === "vehicle")
+    .map((d: any) => {
+      let m: any = {};
+      try { m = d.metadata ? JSON.parse(d.metadata) : {}; } catch { /* ignore */ }
+      const parts = [m.placa, m.marcaModelo].filter(Boolean);
+      return { id: d.id, label: parts.length ? parts.join(" · ") : d.title, tipo: "" };
+    });
+
   const renderRow = (doc: any) => (
     <div key={doc.id} className="flex items-center justify-between px-4 py-3 hover:bg-accent/30 transition-colors">
       <div className="flex items-center gap-3 min-w-0">
@@ -1034,7 +1043,7 @@ export default function Documentos() {
                   setMetaForm,
                   (cat) => setForm((p) => ({ ...p, category: cat })),
                 )}
-                linkOptions={consorcioOptions}
+                linkOptions={{ consorcio: consorcioOptions, vehicle: vehicleOptions }}
               />
 
               <div className="space-y-2">
@@ -1162,7 +1171,7 @@ export default function Documentos() {
               aiAvailable={!!aiCfg?.configured && editingId != null}
               aiPending={aiExtractMutation.isPending}
               onAiFill={() => editingId != null && runAiFill({ id: editingId, category: editForm.category }, setEditMeta)}
-              linkOptions={consorcioOptions.filter((o) => o.id !== editingId)}
+              linkOptions={{ consorcio: consorcioOptions.filter((o) => o.id !== editingId), vehicle: vehicleOptions.filter((o) => o.id !== editingId) }}
             />
 
             <div className="flex flex-wrap gap-2">

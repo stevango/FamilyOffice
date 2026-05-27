@@ -6,8 +6,8 @@ export type DocField = {
   key: string;
   label: string;
   options?: string[];
-  /** Multi-select linking to other documents (e.g. "consorcio"). */
-  multi?: "consorcio";
+  /** Multi-select linking to other documents (e.g. "consorcio", "vehicle"). */
+  multi?: "consorcio" | "vehicle";
   /** For a "consorcio" multi field, only offer consórcios of these tipos. */
   multiTipos?: string[];
   /** Only show this field when all listed conditions match (AND). */
@@ -76,6 +76,17 @@ export const CATEGORY_FIELDS: Record<string, DocField[]> = {
     { key: "vendedorCnpj", label: "Vendedor: CNPJ", showWhen: [{ field: "operacao", value: "Compra" }, { field: "vendedorTipoPessoa", value: "Pessoa jurídica" }] },
     { key: "valorVenda", label: "Valor da venda", showWhen: [{ field: "operacao", value: "Venda" }] },
     { key: "dataVenda", label: "Data da venda", showWhen: [{ field: "operacao", value: "Venda" }] },
+    { key: "compradorNome", label: "Comprador (nome)", showWhen: [{ field: "operacao", value: "Venda" }] },
+    { key: "compradorTipoPessoa", label: "Comprador: tipo de pessoa", options: ["Pessoa física", "Pessoa jurídica"], showWhen: [{ field: "operacao", value: "Venda" }] },
+    { key: "compradorCpf", label: "Comprador: CPF", showWhen: [{ field: "operacao", value: "Venda" }, { field: "compradorTipoPessoa", value: "Pessoa física" }] },
+    { key: "compradorCnpj", label: "Comprador: CNPJ", showWhen: [{ field: "operacao", value: "Venda" }, { field: "compradorTipoPessoa", value: "Pessoa jurídica" }] },
+    { key: "entradaEmOutroVeiculo", label: "Foi dado de entrada em outro veículo?", options: ["Sim", "Não"], showWhen: [{ field: "operacao", value: "Venda" }] },
+    { key: "veiculoNovoPlaca", label: "Novo veículo: placa", showWhen: [{ field: "operacao", value: "Venda" }, { field: "entradaEmOutroVeiculo", value: "Sim" }] },
+    { key: "veiculoNovoProprietario", label: "Novo veículo: proprietário", showWhen: [{ field: "operacao", value: "Venda" }, { field: "entradaEmOutroVeiculo", value: "Sim" }] },
+    { key: "veiculoNovoTipoPessoa", label: "Novo veículo: tipo de pessoa", options: ["Pessoa física", "Pessoa jurídica"], showWhen: [{ field: "operacao", value: "Venda" }, { field: "entradaEmOutroVeiculo", value: "Sim" }] },
+    { key: "veiculoNovoCpf", label: "Novo veículo: CPF do proprietário", showWhen: [{ field: "operacao", value: "Venda" }, { field: "entradaEmOutroVeiculo", value: "Sim" }, { field: "veiculoNovoTipoPessoa", value: "Pessoa física" }] },
+    { key: "veiculoNovoCnpj", label: "Novo veículo: CNPJ do proprietário", showWhen: [{ field: "operacao", value: "Venda" }, { field: "entradaEmOutroVeiculo", value: "Sim" }, { field: "veiculoNovoTipoPessoa", value: "Pessoa jurídica" }] },
+    { key: "veiculoNovoVinculo", label: "Vincular a um veículo cadastrado", multi: "vehicle", showWhen: [{ field: "operacao", value: "Venda" }, { field: "entradaEmOutroVeiculo", value: "Sim" }] },
     ...paymentFields,
   ],
   property: [
