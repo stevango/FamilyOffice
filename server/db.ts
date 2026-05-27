@@ -13,6 +13,7 @@ import {
   integrations, InsertIntegration,
   invites, InsertInvite,
   legalCases, InsertLegalCase,
+  shareAccessLogs, type InsertShareAccessLog,
   transactions, InsertTransaction,
   users, type InsertUser, type Role,
 } from "../drizzle/schema";
@@ -301,6 +302,29 @@ export async function createDocument(data: InsertDocument) {
 
 export async function updateDocument(id: number, householdId: number, data: Partial<InsertDocument>) {
   await getDb().update(documents).set(data).where(and(eq(documents.id, id), inArray(documents.userId, memberIds(householdId))));
+}
+
+export async function logShareAccess(data: InsertShareAccessLog) {
+  await getDb().insert(shareAccessLogs).values(data);
+}
+
+export async function getShareAccessLogs(householdId: number, limit = 50) {
+  return getDb()
+    .select({
+      id: shareAccessLogs.id,
+      documentId: shareAccessLogs.documentId,
+      fileKey: shareAccessLogs.fileKey,
+      ip: shareAccessLogs.ip,
+      userAgent: shareAccessLogs.userAgent,
+      accessedAt: shareAccessLogs.accessedAt,
+      title: documents.title,
+      category: documents.category,
+    })
+    .from(shareAccessLogs)
+    .leftJoin(documents, eq(shareAccessLogs.documentId, documents.id))
+    .where(eq(shareAccessLogs.householdId, householdId))
+    .orderBy(desc(shareAccessLogs.accessedAt))
+    .limit(limit);
 }
 
 export async function deleteDocument(id: number, householdId: number) {

@@ -23,6 +23,7 @@ import {
   Users,
   Loader2,
   Info,
+  History,
 } from "lucide-react";
 
 type Doc = {
@@ -133,8 +134,19 @@ function formatDate(date: string | Date) {
   return new Date(date).toLocaleDateString("pt-BR");
 }
 
+function formatDateTime(date: string | Date) {
+  return new Date(date).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export default function Contador() {
   const { data: documents, isLoading } = trpc.documents.list.useQuery();
+  const { data: accessLog } = trpc.documents.shareAccessLog.useQuery();
   const shareLinkMutation = trpc.documents.shareLink.useMutation();
   const [year, setYear] = useState<string>("all");
   const [bundling, setBundling] = useState<string | null>(null);
@@ -357,11 +369,33 @@ export default function Contador() {
         </div>
       )}
 
+      {/* Audit trail */}
+      {accessLog && accessLog.length > 0 && (
+        <div className="rounded-lg border border-border/60 overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 bg-secondary/40 border-b border-border/60">
+            <History className="h-4 w-4 text-primary" />
+            <h2 className="text-sm font-semibold">Acessos recentes aos links</h2>
+          </div>
+          <div className="divide-y divide-border">
+            {accessLog.map((log) => (
+              <div key={log.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-xs">
+                <div className="min-w-0">
+                  <p className="font-medium truncate">{log.title ?? "Documento removido"}</p>
+                  <p className="text-muted-foreground mt-0.5">{log.ip || "IP desconhecido"}</p>
+                </div>
+                <span className="text-muted-foreground shrink-0">{formatDateTime(log.accessedAt)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="flex items-start gap-2 rounded-md bg-secondary/40 p-3 text-xs text-muted-foreground">
         <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
         <span>
-          Os links de compartilhamento são assinados e expiram em 7 dias. Um portal dedicado
-          do contador (com acesso por convite e trilha de auditoria) está no roadmap.
+          Os links de compartilhamento são assinados e expiram em 7 dias, e cada acesso fica
+          registrado na trilha de auditoria acima. Um portal dedicado do contador (com acesso
+          por convite e login próprio) está no roadmap.
         </span>
       </div>
     </div>

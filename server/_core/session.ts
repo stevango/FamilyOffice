@@ -39,12 +39,25 @@ export async function signSession(payload: SessionPayload, expiresInMs = ONE_YEA
     .sign(secretKey());
 }
 
-type SharePayload = { fileKey: string; fileName: string; mimeType: string };
+type SharePayload = {
+  fileKey: string;
+  fileName: string;
+  mimeType: string;
+  documentId?: number;
+  householdId?: number;
+};
 
 /** Sign a short-lived public link token for sharing a single file. */
 export async function signShareToken(payload: SharePayload, expiresInMs = 7 * 24 * 60 * 60 * 1000): Promise<string> {
   const exp = Math.floor((Date.now() + expiresInMs) / 1000);
-  return new SignJWT({ kind: "share", fileKey: payload.fileKey, fileName: payload.fileName, mimeType: payload.mimeType })
+  return new SignJWT({
+    kind: "share",
+    fileKey: payload.fileKey,
+    fileName: payload.fileName,
+    mimeType: payload.mimeType,
+    documentId: payload.documentId,
+    householdId: payload.householdId,
+  })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setExpirationTime(exp)
     .sign(secretKey());
@@ -59,6 +72,8 @@ export async function verifyShareToken(token: string | undefined | null): Promis
       fileKey: payload.fileKey,
       fileName: typeof payload.fileName === "string" ? payload.fileName : "documento",
       mimeType: typeof payload.mimeType === "string" ? payload.mimeType : "application/octet-stream",
+      documentId: typeof payload.documentId === "number" ? payload.documentId : undefined,
+      householdId: typeof payload.householdId === "number" ? payload.householdId : undefined,
     };
   } catch {
     return null;

@@ -197,6 +197,18 @@ export function registerFileRoutes(app: Application) {
       res.status(404).type("html").send("Arquivo não encontrado.");
       return;
     }
+    // Audit trail: record the access (best-effort, never blocks serving).
+    if (payload.householdId) {
+      const fwd = req.headers["x-forwarded-for"];
+      const ip = (Array.isArray(fwd) ? fwd[0] : fwd)?.split(",")[0]?.trim() || req.socket.remoteAddress || "";
+      db.logShareAccess({
+        householdId: payload.householdId,
+        documentId: payload.documentId ?? null,
+        fileKey: payload.fileKey,
+        ip: ip.slice(0, 64),
+        userAgent: String(req.headers["user-agent"] ?? "").slice(0, 255),
+      }).catch(() => {});
+    }
     res.set("Content-Type", payload.mimeType || "application/octet-stream");
     res.set("Content-Length", String(buffer.length));
     res.set("Content-Disposition", `inline; filename="${encodeURIComponent(payload.fileName)}"`);
@@ -607,9 +619,13 @@ export const appRouter = router({
         fileKey: doc.fileKey,
         fileName: doc.fileName,
         mimeType: doc.mimeType ?? "application/octet-stream",
+        documentId: doc.id,
+        householdId: ctx.user.householdId,
       });
       return { token };
     }),
+    /** Audit trail: recent accesses to public share links in the household. */
+    shareAccessLog: protectedProcedure.query(async ({ ctx }) => db.getShareAccessLogs(ctx.user.householdId)),
     /** Consultor IA: summarize a document and flag income-tax relevance (Claude). */
     summarize: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
       const doc = await db.getDocumentById(ctx.user.householdId, input.id);

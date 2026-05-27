@@ -237,3 +237,20 @@ export const fileBlobs = mysqlTable("file_blobs", {
 });
 
 export type FileBlob = typeof fileBlobs.$inferSelect;
+
+/**
+ * Audit trail of public share-link accesses. One row per time a signed link
+ * (email/WhatsApp) is opened, so the household can see who viewed what.
+ */
+export const shareAccessLogs = mysqlTable("share_access_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  householdId: int("householdId").notNull(),
+  documentId: int("documentId"),
+  fileKey: varchar("fileKey", { length: 500 }).notNull(),
+  ip: varchar("ip", { length: 64 }),
+  userAgent: varchar("userAgent", { length: 255 }),
+  accessedAt: timestamp("accessedAt").defaultNow().notNull(),
+}, (t) => [index("share_access_household_idx").on(t.householdId)]);
+
+export type ShareAccessLog = typeof shareAccessLogs.$inferSelect;
+export type InsertShareAccessLog = typeof shareAccessLogs.$inferInsert;
