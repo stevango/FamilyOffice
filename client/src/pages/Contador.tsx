@@ -41,6 +41,7 @@ import {
   Wrench,
   Check,
   Undo2,
+  RefreshCw,
 } from "lucide-react";
 
 type Doc = {
@@ -407,7 +408,7 @@ function formatDateTime(date: string | Date) {
 
 export default function Contador() {
   const utils = trpc.useUtils();
-  const { data: documents, isLoading } = trpc.documents.list.useQuery();
+  const { data: documents, isLoading, refetch, isFetching } = trpc.documents.list.useQuery();
   const { data: accessLog } = trpc.documents.shareAccessLog.useQuery();
   const shareLinkMutation = trpc.documents.shareLink.useMutation();
   const updateMutation = trpc.documents.update.useMutation({
@@ -582,6 +583,25 @@ export default function Contador() {
 
   const flaggedCount = fiscalDocs.filter(flaggedForAccountant).length;
 
+  const reprocessAudit = async () => {
+    await refetch();
+    toast.success("Auditoria reprocessada");
+  };
+
+  const reprocessButton = (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="gap-2 h-8"
+      disabled={isFetching}
+      onClick={reprocessAudit}
+    >
+      <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
+      Reprocessar
+    </Button>
+  );
+
   const renderFinding = (f: AuditFinding, isReviewed: boolean) => (
     <div key={f.id} className={`px-4 py-3 ${isReviewed ? "opacity-60" : ""}`}>
       <div className="flex items-center justify-between gap-2">
@@ -673,17 +693,23 @@ export default function Contador() {
       {fiscalDocs.length > 0 && (
         <div className="space-y-3">
           {activeFindings.length === 0 ? (
-            <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm text-emerald-400">
-              <ShieldCheck className="h-4 w-4 shrink-0" />
-              Auditoria: nenhuma inconsistência pendente nos dados fiscais.
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm text-emerald-400">
+              <span className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 shrink-0" />
+                Auditoria: nenhuma inconsistência pendente nos dados fiscais.
+              </span>
+              {reprocessButton}
             </div>
           ) : (
             <div className="rounded-lg border border-amber-500/40 overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-3 bg-amber-500/10 border-b border-amber-500/30">
-                <ShieldAlert className="h-4 w-4 text-amber-400" />
-                <h2 className="text-sm font-semibold text-amber-300">
-                  Auditoria — {activeFindings.length} {activeFindings.length === 1 ? "inconsistência" : "inconsistências"} a revisar
-                </h2>
+              <div className="flex items-center justify-between gap-2 px-4 py-3 bg-amber-500/10 border-b border-amber-500/30">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 text-amber-400" />
+                  <h2 className="text-sm font-semibold text-amber-300">
+                    Auditoria — {activeFindings.length} {activeFindings.length === 1 ? "inconsistência" : "inconsistências"} a revisar
+                  </h2>
+                </div>
+                {reprocessButton}
               </div>
               <div className="divide-y divide-border">
                 {activeFindings.map((f) => renderFinding(f, false))}
