@@ -42,6 +42,7 @@ import {
   Check,
   Undo2,
   RefreshCw,
+  ArrowRightLeft,
 } from "lucide-react";
 
 type Doc = {
@@ -523,6 +524,26 @@ export default function Contador() {
     return { consorcio, vehicle };
   }, [documents]);
 
+  // Reverse linkage: for each consórcio id, the vehicle/property purchase that
+  // used its (contemplated) credit — so the accountant sees where it went.
+  const consorcioLinks = useMemo(() => {
+    const map = new Map<number, { label: string; proprietario: string }>();
+    for (const d of (documents as Doc[] | undefined) ?? []) {
+      const m = parseMeta(d);
+      const ids = String(m.consorciosVinculados ?? "")
+        .split(",")
+        .map((x) => parseInt(x, 10))
+        .filter(Boolean);
+      if (!ids.length) continue;
+      const placa = m.placa ?? "";
+      const label = m.marcaModelo
+        ? `${m.marcaModelo}${placa ? ` · ${placa}` : ""}`
+        : m.endereco || d.title;
+      for (const id of ids) if (!map.has(id)) map.set(id, { label, proprietario: m.proprietario ?? "" });
+    }
+    return map;
+  }, [documents]);
+
   const years = useMemo(() => {
     const set = new Set(fiscalDocs.map(fiscalYear));
     return Array.from(set).sort((a, b) => Number(b) - Number(a));
@@ -894,13 +915,18 @@ export default function Contador() {
               </div>
               <div className="divide-y divide-border">
                 {docs.map((doc) => {
+                  const dm = parseMeta(doc);
                   const value = relevantValue(doc);
-                  const sub = parseMeta(doc).subcategoria;
+                  const sub = dm.subcategoria;
                   const label =
                     doc.category === "finance" && sub ? sub : CATEGORY_LABELS[doc.category] ?? doc.category;
                   const op = operacao(doc);
                   const tipoCons = consorcioTipo(doc);
                   const contrato = numeroContrato(doc);
+                  const isCons = doc.category === "consorcio";
+                  const credito = isCons ? dm.valorCredito : "";
+                  const contemplada = isCons && /contempl/i.test(dm.situacao ?? "");
+                  const vinculo = isCons ? consorcioLinks.get(doc.id) ?? null : null;
                   return (
                     <div
                       key={doc.id}
@@ -927,6 +953,11 @@ export default function Contador() {
                               {tipoCons}
                             </Badge>
                           )}
+                          {contemplada && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-emerald-500/50 bg-emerald-500/10 text-emerald-400">
+                              Contemplada
+                            </Badge>
+                          )}
                           <p className="text-sm font-medium truncate">{doc.title}</p>
                         </div>
                         <div className="flex items-center gap-2 mt-1 flex-wrap text-xs text-muted-foreground">
@@ -939,6 +970,12 @@ export default function Contador() {
                           <span>{titular(doc)}</span>
                           <span>·</span>
                           <span>{formatDate(doc.createdAt)}</span>
+                          {credito && (
+                            <>
+                              <span>·</span>
+                              <span className="text-foreground/80">Crédito {credito}</span>
+                            </>
+                          )}
                           {value && (
                             <>
                               <span>·</span>
@@ -946,6 +983,15 @@ export default function Contador() {
                             </>
                           )}
                         </div>
+                        {vinculo && (
+                          <div className="flex items-center gap-1.5 mt-1 text-xs text-emerald-400/90">
+                            <ArrowRightLeft className="h-3 w-3 shrink-0" />
+                            <span className="truncate">
+                              Carta utilizada em: <span className="font-medium">{vinculo.label}</span>
+                              {vinculo.proprietario ? ` (${vinculo.proprietario})` : ""}
+                            </span>
+                          </div>
+                        )}
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <Link href={`/documentos?open=${doc.id}`}>
