@@ -279,6 +279,8 @@ export const companies = mysqlTable("companies", {
   bancoPrincipal: varchar("bancoPrincipal", { length: 255 }),
   temCertificado: int("temCertificado").default(0).notNull(),
   certificadoVencimento: date("certificadoVencimento", { mode: "string" }),
+  certificadoFileKey: varchar("certificadoFileKey", { length: 500 }),
+  certificadoFileName: varchar("certificadoFileName", { length: 500 }),
   ultimaAlteracao: date("ultimaAlteracao", { mode: "string" }),
   finalidade: mysqlEnum("finalidade", [
     "operacional", "patrimonial", "holding", "investimento", "tecnologia", "seguros",
@@ -286,6 +288,7 @@ export const companies = mysqlTable("companies", {
     "risco", "encerramento", "reestruturacao", "sucessao", "outro",
   ]).default("operacional").notNull(),
   status: mysqlEnum("status", ["ativa", "inativa", "baixada", "em_analise", "risco", "pendente"]).default("ativa").notNull(),
+  capitalSocial: decimal("capitalSocial", { precision: 15, scale: 2 }),
   valorEstimado: decimal("valorEstimado", { precision: 15, scale: 2 }),
   /** Selected risk tags (JSON array of strings). */
   riscos: text("riscos"),

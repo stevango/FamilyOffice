@@ -350,6 +350,14 @@ export async function getCompanyPartners(householdId: number) {
     .where(eq(companyPartners.householdId, householdId));
 }
 
+/** Find a company in the household whose certificate file matches the key. */
+export async function getCompanyByCertKey(householdId: number, fileKey: string) {
+  const rows = await getDb().select().from(companies)
+    .where(and(eq(companies.householdId, householdId), eq(companies.certificadoFileKey, fileKey)))
+    .limit(1);
+  return rows[0];
+}
+
 export async function createCompany(data: InsertCompany) {
   const result = await getDb().insert(companies).values(data);
   return { id: result[0].insertId };

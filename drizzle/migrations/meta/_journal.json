@@ -113,6 +113,20 @@
       "when": 1779891508500,
       "tag": "0015_minor_the_leader",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "5",
+      "when": 1779893478965,
+      "tag": "0016_worthless_demogoblin",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "5",
+      "when": 1779893666666,
+      "tag": "0017_flaky_wasp",
+      "breakpoints": true
     }
   ]
 }

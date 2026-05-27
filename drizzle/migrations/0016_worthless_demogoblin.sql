@@ -1,0 +1,1 @@
+ALTER TABLE `companies` ADD `capitalSocial` decimal(15,2);

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,7 @@ import {
   CheckCircle2,
   TrendingUp,
   CalendarClock,
+  Upload,
 } from "lucide-react";
 
 const FINALIDADE: Record<string, { label: string; color: string }> = {
@@ -134,9 +135,12 @@ type Company = {
   bancoPrincipal?: string | null;
   temCertificado: number;
   certificadoVencimento?: string | null;
+  certificadoFileKey?: string | null;
+  certificadoFileName?: string | null;
   ultimaAlteracao?: string | null;
   finalidade: string;
   status: string;
+  capitalSocial?: string | null;
   valorEstimado?: string | null;
   riscos: string[];
   riscoNivel: string;
@@ -163,8 +167,9 @@ const emptyForm = {
   razaoSocial: "", nomeFantasia: "", cnpj: "", inscricaoEstadual: "", inscricaoMunicipal: "",
   dataAbertura: "", situacaoCadastral: "", regimeTributario: "", cnaePrincipal: "", cnaeSecundarios: "",
   ramo: "", endereco: "", contador: "", advogado: "", bancoPrincipal: "",
-  certificadoVencimento: "", ultimaAlteracao: "", finalidade: "operacional", status: "ativa",
-  valorEstimado: "", riscoNivel: "baixo", planejamento: "", notes: "",
+  certificadoVencimento: "", certificadoFileKey: "", certificadoFileName: "",
+  ultimaAlteracao: "", finalidade: "operacional", status: "ativa",
+  capitalSocial: "", valorEstimado: "", riscoNivel: "baixo", planejamento: "", notes: "",
 };
 
 const emptyPartner = {
@@ -187,7 +192,24 @@ export default function Empresas() {
   const [partnerForm, setPartnerForm] = useState({ ...emptyPartner });
   const [editingPartnerId, setEditingPartnerId] = useState<number | null>(null);
   const [partnerFlags, setPartnerFlags] = useState({ isAdministrador: false, poderesBancarios: false, assinaContratos: false, possuiProcuracao: false });
-  const [pendingSocios, setPendingSocios] = useState<{ nome: string; qualificacao: string; cpfCnpj: string }[]>([]);
+  const [pendingSocios, setPendingSocios] = useState<{ nome: string; qualificacao: string; cpfCnpj: string; percentual: string }[]>([]);
+  const certInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingCert, setUploadingCert] = useState(false);
+
+  const handleCertUpload = async (file: File) => {
+    setUploadingCert(true);
+    try {
+      const res = await fetch("/api/upload", { method: "POST", headers: { "x-file-name": encodeURIComponent(file.name) }, body: file });
+      if (!res.ok) throw new Error("Falha no upload do certificado");
+      const data = await res.json();
+      setForm((p) => ({ ...p, certificadoFileKey: data.key, certificadoFileName: data.fileName }));
+      toast.success("Arquivo do certificado enviado");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Falha no upload");
+    } finally {
+      setUploadingCert(false);
+    }
+  };
 
   const invalidate = () => utils.companies.list.invalidate();
   const createMut = trpc.companies.create.useMutation({ onSuccess: () => invalidate() });
@@ -224,15 +246,22 @@ export default function Empresas() {
     return "socio";
   }
 
-  async function importSocios(companyId: number, socios: { nome: string; qualificacao: string; cpfCnpj: string }[]) {
+  async function importSocios(
+    companyId: number,
+    socios: { nome: string; qualificacao: string; cpfCnpj: string; percentual: string }[],
+    capital?: number,
+  ) {
     for (const s of socios) {
       const digits = onlyDigits(s.cpfCnpj);
+      const pct = parseBRLNum(s.percentual);
       await addPartnerMut.mutateAsync({
         companyId,
         nome: s.nome,
         cpfCnpj: digits.length === 11 || digits.length === 14 ? s.cpfCnpj : "",
         tipoParticipacao: qualToTipo(s.qualificacao) as any,
         funcao: s.qualificacao || undefined,
+        percentual: pct ? String(pct) : "",
+        capitalSocial: capital && pct ? String(Math.round(capital * pct) / 100) : "",
       });
     }
     if (socios.length) toast.success(`${socios.length} sócio(s) importado(s) do CNPJ`);
@@ -247,8 +276,11 @@ export default function Empresas() {
       regimeTributario: c.regimeTributario ?? "", cnaePrincipal: c.cnaePrincipal ?? "",
       cnaeSecundarios: c.cnaeSecundarios ?? "", ramo: c.ramo ?? "", endereco: c.endereco ?? "",
       contador: c.contador ?? "", advogado: c.advogado ?? "", bancoPrincipal: c.bancoPrincipal ?? "",
-      certificadoVencimento: c.certificadoVencimento ?? "", ultimaAlteracao: c.ultimaAlteracao ?? "",
-      finalidade: c.finalidade, status: c.status, valorEstimado: c.valorEstimado ? formatBRL(Number(c.valorEstimado)) : "",
+      certificadoVencimento: c.certificadoVencimento ?? "", certificadoFileKey: c.certificadoFileKey ?? "", certificadoFileName: c.certificadoFileName ?? "",
+      ultimaAlteracao: c.ultimaAlteracao ?? "",
+      finalidade: c.finalidade, status: c.status,
+      capitalSocial: c.capitalSocial ? formatBRL(Number(c.capitalSocial)) : "",
+      valorEstimado: c.valorEstimado ? formatBRL(Number(c.valorEstimado)) : "",
       riscoNivel: c.riscoNivel, planejamento: c.planejamento ?? "", notes: c.notes ?? "",
     });
     setTemCertificado(c.temCertificado === 1);
@@ -260,6 +292,7 @@ export default function Empresas() {
 
   const payload = () => ({
     ...form,
+    capitalSocial: form.capitalSocial ? String(parseBRLNum(form.capitalSocial)) : "",
     valorEstimado: form.valorEstimado ? String(parseBRLNum(form.valorEstimado)) : "",
     temCertificado,
     riscos,
@@ -276,7 +309,7 @@ export default function Empresas() {
       } else {
         const res = await createMut.mutateAsync(payload());
         const newId = Number((res as any)?.id);
-        if (pendingSocios.length && newId) await importSocios(newId, pendingSocios);
+        if (pendingSocios.length && newId) await importSocios(newId, pendingSocios, parseBRLNum(form.capitalSocial));
         setPendingSocios([]);
         toast.success("Empresa cadastrada");
         setOpen(false);
@@ -292,6 +325,7 @@ export default function Empresas() {
     try {
       const res = await lookupCnpj.mutateAsync({ cnpj: digits });
       const f = res.fields as Record<string, string>;
+      const capital = f.capitalSocial ? Number(f.capitalSocial) : 0;
       setForm((p) => ({
         ...p,
         razaoSocial: p.razaoSocial || f.razaoSocial || "",
@@ -304,10 +338,14 @@ export default function Empresas() {
         endereco: f.endereco || p.endereco,
         inscricaoEstadual: f.inscricaoEstadual || p.inscricaoEstadual,
         dataAbertura: f.dataAberturaIso || p.dataAbertura,
+        capitalSocial: capital ? formatBRL(capital) : p.capitalSocial,
       }));
-      const socios = (res.socios ?? []) as { nome: string; qualificacao: string; cpfCnpj: string }[];
+      const raw = (res.socios ?? []) as { nome: string; qualificacao: string; cpfCnpj: string }[];
+      // Public data has no per-partner %, so suggest an equal split to edit.
+      const split = raw.length ? (Math.round((100 / raw.length) * 100) / 100).toFixed(2) : "";
+      const socios = raw.map((s) => ({ ...s, percentual: split }));
       if (socios.length) {
-        if (editingId != null) await importSocios(editingId, socios);
+        if (editingId != null) await importSocios(editingId, socios, capital);
         else setPendingSocios(socios);
       }
       toast.success(`Dados da Receita carregados${socios.length ? ` · ${socios.length} sócio(s)` : ""}`);
@@ -517,6 +555,7 @@ export default function Empresas() {
                 <Field label="Contador responsável"><Input value={form.contador} onChange={(e) => setForm({ ...form, contador: e.target.value })} /></Field>
                 <Field label="Advogado responsável"><Input value={form.advogado} onChange={(e) => setForm({ ...form, advogado: e.target.value })} /></Field>
                 <Field label="Banco principal"><Input value={form.bancoPrincipal} onChange={(e) => setForm({ ...form, bancoPrincipal: e.target.value })} /></Field>
+                <Field label="Capital social (R$)"><Input value={form.capitalSocial} onChange={(e) => setForm({ ...form, capitalSocial: maskMoney(e.target.value) })} /></Field>
                 <Field label="Última alteração contratual"><Input type="date" value={form.ultimaAlteracao} onChange={(e) => setForm({ ...form, ultimaAlteracao: e.target.value })} /></Field>
                 <Field label="Finalidade">
                   <Select value={form.finalidade} onValueChange={(v) => setForm({ ...form, finalidade: v })}>
@@ -531,13 +570,33 @@ export default function Empresas() {
                   </Select>
                 </Field>
               </div>
-              <div className="flex items-center gap-3 rounded-md border border-border/60 p-3">
-                <Switch checked={temCertificado} onCheckedChange={setTemCertificado} />
-                <span className="text-sm">Possui certificado digital</span>
+              <div className="rounded-md border border-border/60 p-3 space-y-3">
+                <div className="flex items-center gap-3">
+                  <Switch checked={temCertificado} onCheckedChange={(v) => { setTemCertificado(v); if (!v) setForm((p) => ({ ...p, certificadoFileKey: "", certificadoFileName: "" })); }} />
+                  <span className="text-sm">Possui certificado digital</span>
+                  {temCertificado && (
+                    <div className="ml-auto flex items-center gap-2">
+                      <Label className="text-xs text-muted-foreground">Vencimento</Label>
+                      <Input type="date" className="h-8 w-40" value={form.certificadoVencimento} onChange={(e) => setForm({ ...form, certificadoVencimento: e.target.value })} />
+                    </div>
+                  )}
+                </div>
                 {temCertificado && (
-                  <div className="ml-auto flex items-center gap-2">
-                    <Label className="text-xs text-muted-foreground">Vencimento</Label>
-                    <Input type="date" className="h-8 w-40" value={form.certificadoVencimento} onChange={(e) => setForm({ ...form, certificadoVencimento: e.target.value })} />
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <input ref={certInputRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCertUpload(f); e.target.value = ""; }} />
+                    <Button type="button" variant="outline" size="sm" className="gap-2" onClick={() => certInputRef.current?.click()} disabled={uploadingCert}>
+                      {uploadingCert ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                      {form.certificadoFileKey ? "Substituir arquivo" : "Enviar arquivo do certificado"}
+                    </Button>
+                    {form.certificadoFileKey && (
+                      <>
+                        <a href={`/api/files/${encodeURI(form.certificadoFileKey)}`} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline truncate max-w-[220px]">
+                          {form.certificadoFileName || "Ver arquivo"}
+                        </a>
+                        <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-red-400" onClick={() => setForm((p) => ({ ...p, certificadoFileKey: "", certificadoFileName: "" }))}><Trash2 className="h-3.5 w-3.5" /></Button>
+                      </>
+                    )}
+                    <span className="text-[11px] text-muted-foreground w-full">Aceita .pfx/.p12/.cer ou PDF. O link de visualização funciona após salvar a empresa.</span>
                   </div>
                 )}
               </div>
@@ -547,13 +606,35 @@ export default function Empresas() {
               {editingId == null ? (
                 pendingSocios.length > 0 ? (
                   <div className="space-y-2">
-                    <p className="text-sm text-emerald-400">{pendingSocios.length} sócio(s) encontrados na Receita — serão adicionados ao salvar a empresa:</p>
-                    <div className="flex flex-wrap gap-1.5">
+                    <p className="text-sm text-emerald-400">{pendingSocios.length} sócio(s) encontrados na Receita — defina a participação e salve a empresa:</p>
+                    <div className="divide-y divide-border rounded-md border border-border/60">
                       {pendingSocios.map((s, i) => (
-                        <Badge key={i} variant="secondary" className="text-xs">{s.nome}{s.qualificacao ? ` · ${s.qualificacao}` : ""}</Badge>
+                        <div key={i} className="flex items-center justify-between gap-2 px-3 py-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">{s.nome}</p>
+                            <p className="text-xs text-muted-foreground truncate">{s.qualificacao}</p>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <Input
+                              className="h-8 w-20 text-right"
+                              value={s.percentual}
+                              onChange={(e) => setPendingSocios((prev) => prev.map((x, j) => j === i ? { ...x, percentual: e.target.value } : x))}
+                              placeholder="%"
+                            />
+                            <span className="text-xs text-muted-foreground">%</span>
+                          </div>
+                        </div>
                       ))}
                     </div>
-                    <p className="text-xs text-muted-foreground">Você poderá editar percentuais e poderes depois de salvar.</p>
+                    {(() => {
+                      const total = pendingSocios.reduce((s, p) => s + parseBRLNum(p.percentual), 0) / 100;
+                      return (
+                        <p className={`text-xs ${Math.abs(total - 100) < 0.01 ? "text-muted-foreground" : "text-amber-400"}`}>
+                          Soma das participações: {total.toFixed(2)}%{Math.abs(total - 100) < 0.01 ? "" : " (deveria somar 100%)"}
+                        </p>
+                      );
+                    })()}
+                    <p className="text-xs text-muted-foreground">A sugestão é divisão igualitária. Informe o capital social na aba Dados para calcular o capital de cada sócio.</p>
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">Salve a empresa primeiro para adicionar sócios — ou consulte o CNPJ para importar o quadro societário automaticamente.</p>

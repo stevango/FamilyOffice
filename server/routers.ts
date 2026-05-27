@@ -164,9 +164,11 @@ export function registerFileRoutes(app: Application) {
       );
     };
 
-    // Only serve files that belong to a document in the user's household.
+    // Serve files that belong to a document or a company certificate in the
+    // user's household.
     const doc = await db.getDocumentByKey(user.householdId, key);
-    if (!doc) {
+    const company = doc ? null : await db.getCompanyByCertKey(user.householdId, key);
+    if (!doc && !company) {
       sendMissing();
       return;
     }
@@ -176,10 +178,11 @@ export function registerFileRoutes(app: Application) {
       sendMissing();
       return;
     }
-    res.set("Content-Type", doc.mimeType || "application/octet-stream");
+    const fileName = doc?.fileName || company?.certificadoFileName || "certificado";
+    res.set("Content-Type", doc?.mimeType || "application/octet-stream");
     res.set("Content-Length", String(buffer.length));
     res.set("Cache-Control", "private, max-age=0, no-cache");
-    res.set("Content-Disposition", `inline; filename="${encodeURIComponent(doc.fileName)}"`);
+    res.set("Content-Disposition", `inline; filename="${encodeURIComponent(fileName)}"`);
     res.send(buffer);
   });
 
@@ -852,9 +855,12 @@ export const appRouter = router({
       bancoPrincipal: z.string().optional(),
       temCertificado: z.boolean().optional(),
       certificadoVencimento: z.string().optional(),
+      certificadoFileKey: z.string().optional(),
+      certificadoFileName: z.string().optional(),
       ultimaAlteracao: z.string().optional(),
       finalidade: z.enum(["operacional", "patrimonial", "holding", "investimento", "tecnologia", "seguros", "servicos", "consultoria", "imobiliaria", "veiculos", "familiar", "projeto_futuro", "risco", "encerramento", "reestruturacao", "sucessao", "outro"]).optional(),
       status: z.enum(["ativa", "inativa", "baixada", "em_analise", "risco", "pendente"]).optional(),
+      capitalSocial: z.string().optional(),
       valorEstimado: z.string().optional(),
       riscos: z.array(z.string()).optional(),
       riscoNivel: z.enum(["baixo", "medio", "alto", "critico"]).optional(),
@@ -871,6 +877,7 @@ export const appRouter = router({
         certificadoVencimento: rest.certificadoVencimento || null,
         ultimaAlteracao: rest.ultimaAlteracao || null,
         valorEstimado: rest.valorEstimado || null,
+        capitalSocial: rest.capitalSocial || null,
       } as any);
     }),
     update: writeProcedure.input(z.object({
@@ -892,9 +899,12 @@ export const appRouter = router({
       bancoPrincipal: z.string().optional(),
       temCertificado: z.boolean().optional(),
       certificadoVencimento: z.string().optional(),
+      certificadoFileKey: z.string().optional(),
+      certificadoFileName: z.string().optional(),
       ultimaAlteracao: z.string().optional(),
       finalidade: z.enum(["operacional", "patrimonial", "holding", "investimento", "tecnologia", "seguros", "servicos", "consultoria", "imobiliaria", "veiculos", "familiar", "projeto_futuro", "risco", "encerramento", "reestruturacao", "sucessao", "outro"]).optional(),
       status: z.enum(["ativa", "inativa", "baixada", "em_analise", "risco", "pendente"]).optional(),
+      capitalSocial: z.string().optional(),
       valorEstimado: z.string().optional(),
       riscos: z.array(z.string()).optional(),
       riscoNivel: z.enum(["baixo", "medio", "alto", "critico"]).optional(),
@@ -905,7 +915,7 @@ export const appRouter = router({
       const data: Record<string, unknown> = { ...rest };
       if (riscos !== undefined) data.riscos = riscos.length ? JSON.stringify(riscos) : null;
       if (temCertificado !== undefined) data.temCertificado = temCertificado ? 1 : 0;
-      for (const k of ["dataAbertura", "certificadoVencimento", "ultimaAlteracao", "valorEstimado"]) {
+      for (const k of ["dataAbertura", "certificadoVencimento", "ultimaAlteracao", "valorEstimado", "capitalSocial"]) {
         if (data[k] === "") data[k] = null;
       }
       await db.updateCompany(id, ctx.user.householdId, data as any);
