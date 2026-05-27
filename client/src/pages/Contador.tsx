@@ -25,6 +25,9 @@ import {
   Loader2,
   Info,
   History,
+  AlertTriangle,
+  ShieldCheck,
+  ShieldAlert,
 } from "lucide-react";
 
 type Doc = {
@@ -189,6 +192,149 @@ function relevantValue(doc: Doc): string | null {
   );
 }
 
+/** Format raw CPF/CNPJ digits for display. */
+function formatDoc(digits: string): string {
+  const c = digits.replace(/\D/g, "");
+  if (c.length === 11) return `${c.slice(0, 3)}.${c.slice(3, 6)}.${c.slice(6, 9)}-${c.slice(9)}`;
+  if (c.length === 14) return `${c.slice(0, 2)}.${c.slice(2, 5)}.${c.slice(5, 8)}/${c.slice(8, 12)}-${c.slice(12)}`;
+  return digits;
+}
+
+/** CPF check-digit validation. */
+function isValidCpf(value: string): boolean {
+  const c = value.replace(/\D/g, "");
+  if (c.length !== 11 || /^(\d)\1{10}$/.test(c)) return false;
+  let sum = 0;
+  for (let i = 0; i < 9; i++) sum += parseInt(c[i], 10) * (10 - i);
+  let r = (sum * 10) % 11;
+  if (r === 10) r = 0;
+  if (r !== parseInt(c[9], 10)) return false;
+  sum = 0;
+  for (let i = 0; i < 10; i++) sum += parseInt(c[i], 10) * (11 - i);
+  r = (sum * 10) % 11;
+  if (r === 10) r = 0;
+  return r === parseInt(c[10], 10);
+}
+
+/** CNPJ check-digit validation. */
+function isValidCnpj(value: string): boolean {
+  const c = value.replace(/\D/g, "");
+  if (c.length !== 14 || /^(\d)\1{13}$/.test(c)) return false;
+  const digit = (len: number) => {
+    let sum = 0;
+    let pos = len - 7;
+    for (let i = len; i >= 1; i--) {
+      sum += parseInt(c[len - i], 10) * pos--;
+      if (pos < 2) pos = 9;
+    }
+    const r = sum % 11;
+    return r < 2 ? 0 : 11 - r;
+  };
+  return digit(12) === parseInt(c[12], 10) && digit(13) === parseInt(c[13], 10);
+}
+
+/** Whether a taxpayer document number is structurally valid (or empty). */
+function isDocValid(value: string): boolean {
+  const c = onlyDigits(value);
+  if (!c) return true;
+  if (c.length === 11) return isValidCpf(c);
+  if (c.length === 14) return isValidCnpj(c);
+  return false; // wrong length
+}
+
+type AuditFinding = {
+  id: string;
+  level: "error" | "warning";
+  title: string;
+  detail: string;
+  docs: Doc[];
+};
+
+/** Detect fiscal data inconsistencies the user should fix before sending. */
+function auditFiscalDocs(docs: Doc[]): AuditFinding[] {
+  const out: AuditFinding[] = [];
+
+  // Invalid CPF/CNPJ (one finding per document).
+  for (const d of docs) {
+    const raw = titularDoc(d);
+    if (raw && !isDocValid(raw)) {
+      out.push({
+        id: `invalid-${d.id}`,
+        level: "error",
+        title: "CPF/CNPJ inválido",
+        detail: `${titularName(d) || "Titular"} — ${raw}`,
+        docs: [d],
+      });
+    }
+  }
+
+  // Same name, different document numbers.
+  const byName = new Map<string, Map<string, Doc[]>>();
+  for (const d of docs) {
+    const name = titularName(d).trim().toLowerCase();
+    const digits = onlyDigits(titularDoc(d));
+    if (!name || !digits) continue;
+    if (!byName.has(name)) byName.set(name, new Map());
+    const m = byName.get(name)!;
+    if (!m.has(digits)) m.set(digits, []);
+    m.get(digits)!.push(d);
+  }
+  for (const m of Array.from(byName.values())) {
+    if (m.size > 1) {
+      const all = Array.from(m.values()).reduce<Doc[]>((acc, arr) => acc.concat(arr), []);
+      const numbers = Array.from(m.keys()).map(formatDoc).join(" × ");
+      out.push({
+        id: `name-${onlyDigits(titularDoc(all[0]))}-${all.length}`,
+        level: "warning",
+        title: "Mesmo nome com CPF/CNPJ diferentes",
+        detail: `"${titularName(all[0])}" aparece com: ${numbers}`,
+        docs: all,
+      });
+    }
+  }
+
+  // Same document number, different names.
+  const byDoc = new Map<string, Map<string, Doc[]>>();
+  for (const d of docs) {
+    const digits = onlyDigits(titularDoc(d));
+    const name = titularName(d).trim();
+    if (!digits || !name) continue;
+    if (!byDoc.has(digits)) byDoc.set(digits, new Map());
+    const m = byDoc.get(digits)!;
+    const k = name.toLowerCase();
+    if (!m.has(k)) m.set(k, []);
+    m.get(k)!.push(d);
+  }
+  for (const [digits, m] of Array.from(byDoc.entries())) {
+    if (m.size > 1) {
+      const all = Array.from(m.values()).reduce<Doc[]>((acc, arr) => acc.concat(arr), []);
+      const names = Array.from(m.values()).map((arr) => titularName(arr[0])).join(" × ");
+      out.push({
+        id: `doc-${digits}`,
+        level: "warning",
+        title: "Mesmo CPF/CNPJ com nomes diferentes",
+        detail: `${formatDoc(digits)} aparece como: ${names}`,
+        docs: all,
+      });
+    }
+  }
+
+  // Fiscal document without a taxpayer number.
+  const missing = docs.filter((d) => !onlyDigits(titularDoc(d)));
+  if (missing.length > 0) {
+    out.push({
+      id: "missing-doc",
+      level: "warning",
+      title: "Sem CPF/CNPJ do titular",
+      detail: `${missing.length} documento(s) sem CPF/CNPJ informado`,
+      docs: missing,
+    });
+  }
+
+  // Errors first, then warnings.
+  return out.sort((a, b) => (a.level === b.level ? 0 : a.level === "error" ? -1 : 1));
+}
+
 function formatDate(date: string | Date) {
   return new Date(date).toLocaleDateString("pt-BR");
 }
@@ -216,6 +362,8 @@ export default function Contador() {
     () => ((documents as Doc[] | undefined) ?? []).filter(isFiscal),
     [documents],
   );
+
+  const findings = useMemo(() => auditFiscalDocs(fiscalDocs), [fiscalDocs]);
 
   const years = useMemo(() => {
     const set = new Set(fiscalDocs.map(fiscalYear));
@@ -330,6 +478,54 @@ export default function Contador() {
           <p className="text-2xl font-semibold mt-1">{flaggedCount}</p>
         </div>
       </div>
+
+      {/* Auditoria — inconsistências a corrigir antes de enviar */}
+      {fiscalDocs.length > 0 &&
+        (findings.length === 0 ? (
+          <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm text-emerald-400">
+            <ShieldCheck className="h-4 w-4 shrink-0" />
+            Auditoria: nenhuma inconsistência encontrada nos dados fiscais.
+          </div>
+        ) : (
+          <div className="rounded-lg border border-amber-500/40 overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-3 bg-amber-500/10 border-b border-amber-500/30">
+              <ShieldAlert className="h-4 w-4 text-amber-400" />
+              <h2 className="text-sm font-semibold text-amber-300">
+                Auditoria — {findings.length} {findings.length === 1 ? "inconsistência" : "inconsistências"} a revisar
+              </h2>
+            </div>
+            <div className="divide-y divide-border">
+              {findings.map((f) => (
+                <div key={f.id} className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    {f.level === "error" ? (
+                      <AlertTriangle className="h-3.5 w-3.5 text-red-400 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                    )}
+                    <span className={`text-sm font-medium ${f.level === "error" ? "text-red-400" : "text-amber-300"}`}>
+                      {f.title}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">{f.detail}</p>
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {f.docs.map((d) => (
+                      <Link key={d.id} href={`/documentos?open=${d.id}`}>
+                        <button
+                          type="button"
+                          className="text-[11px] rounded bg-secondary/70 hover:bg-secondary px-2 py-0.5 text-foreground/90 max-w-[260px] truncate"
+                          title={`Abrir: ${d.title}`}
+                        >
+                          {d.title}
+                        </button>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
 
       {/* Filters: exercício × tipo (PF/PJ) × titular */}
       {fiscalDocs.length > 0 && (
