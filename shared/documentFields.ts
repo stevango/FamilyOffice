@@ -157,6 +157,7 @@ export const CATEGORY_FIELDS: Record<string, DocField[]> = {
     { key: "orgaoEmissor", label: "Órgão emissor" },
   ],
   company: [
+    { key: "subcategoria", label: "Subcategoria", options: ["Cartão CNPJ", "Contrato Social", "Alteração Contratual", "Procuração", "Alvará/Licença", "Certificado digital", "Balanço/DRE", "Outro"] },
     { key: "cnpj", label: "CNPJ" },
     { key: "razaoSocial", label: "Razão social" },
     { key: "nomeFantasia", label: "Nome fantasia" },
