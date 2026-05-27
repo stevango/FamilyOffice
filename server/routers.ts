@@ -739,11 +739,13 @@ export const appRouter = router({
       tags: z.string().optional(),
       expiresAt: z.string().optional(),
       metadata: z.record(z.string(), z.string()).optional(),
+      aiSummary: z.string().optional(),
     })).mutation(async ({ ctx, input }) => {
-      const { id, metadata, ...data } = input;
+      const { id, metadata, aiSummary, ...data } = input;
       await db.updateDocument(id, ctx.user.householdId, {
         ...data,
         ...(metadata ? { metadata: JSON.stringify(metadata) } : {}),
+        ...(aiSummary !== undefined ? { aiSummary } : {}),
       } as any);
       return { success: true };
     }),

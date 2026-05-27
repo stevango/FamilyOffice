@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -467,6 +468,7 @@ export default function Documentos() {
       tags: editForm.tags,
       expiresAt: editForm.expiresAt || undefined,
       metadata,
+      aiSummary: aiSummary ? JSON.stringify(aiSummary) : undefined,
     });
   };
 
@@ -1203,14 +1205,21 @@ export default function Documentos() {
                     ))}
                   </ul>
                 )}
-                <div className={`flex items-start gap-2 rounded-md p-2 text-xs ${aiSummary.comunicarContador ? "bg-amber-500/10 text-amber-400" : "bg-emerald-500/10 text-emerald-400"}`}>
-                  {aiSummary.comunicarContador ? <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" /> : <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 shrink-0" />}
-                  <span>
-                    <strong>{aiSummary.comunicarContador ? "Comunicar ao contador (IR)" : "Sem ação para o IR"}</strong>
-                    {aiSummary.irJustificativa ? ` — ${aiSummary.irJustificativa}` : ""}
+                <div className={`flex items-start justify-between gap-2 rounded-md p-2 text-xs ${aiSummary.comunicarContador ? "bg-amber-500/10 text-amber-400" : "bg-emerald-500/10 text-emerald-400"}`}>
+                  <span className="flex items-start gap-2">
+                    {aiSummary.comunicarContador ? <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" /> : <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 shrink-0" />}
+                    <span>
+                      <strong>{aiSummary.comunicarContador ? "Comunicar ao contador (IR)" : "Sem ação para o IR"}</strong>
+                      {aiSummary.irJustificativa ? ` — ${aiSummary.irJustificativa}` : ""}
+                    </span>
                   </span>
+                  <Switch
+                    checked={aiSummary.comunicarContador}
+                    onCheckedChange={(v) => setAiSummary({ ...aiSummary, comunicarContador: v })}
+                    className="shrink-0"
+                  />
                 </div>
-                <p className="text-[10px] text-muted-foreground">Gerado por IA — confira antes de decisões fiscais.</p>
+                <p className="text-[10px] text-muted-foreground">Sugerido pela IA — você pode ajustar o alerta acima. Salve para aplicar.</p>
               </div>
             )}
 
