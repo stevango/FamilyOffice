@@ -312,6 +312,19 @@ function looksLikeCompany(name: string): boolean {
   return /\b(LTDA|EIRELI|EPP|MEI?|S\/?A|S\.A\.?)\b|HOLDING|VENTURE|CAPITAL|COMERCIO|COM[ÉE]RCIO|SERVI[ÇC]OS|INC\b|CORP\b/i.test(name);
 }
 
+/** Identity key for a name that treats abbreviations of the same person as
+ *  equal (e.g. "STEVAN JACKSON PIRES DE ANDRADE" == "STEVAN J P DE ANDRADE")
+ *  by comparing only the first and last name words. */
+function nameKey(name: string): string {
+  const tokens = name
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toUpperCase().replace(/[^A-Z\s]/g, " ")
+    .split(/\s+/).filter((w) => w && w.length > 1 && !["DE", "DA", "DO", "DAS", "DOS", "E"].includes(w));
+  if (tokens.length === 0) return "";
+  if (tokens.length === 1) return tokens[0];
+  return `${tokens[0]} ${tokens[tokens.length - 1]}`;
+}
+
 /** Detect fiscal data inconsistencies the user should fix before sending. */
 function auditFiscalDocs(docs: Doc[]): AuditFinding[] {
   const out: AuditFinding[] = [];
@@ -339,7 +352,7 @@ function auditFiscalDocs(docs: Doc[]): AuditFinding[] {
   // Same name, different document numbers.
   const byName = new Map<string, Map<string, Doc[]>>();
   for (const d of docs) {
-    const name = titularName(d).trim().toLowerCase();
+    const name = nameKey(titularName(d));
     const digits = onlyDigits(titularDoc(d));
     if (!name || !digits) continue;
     if (!byName.has(name)) byName.set(name, new Map());
@@ -370,7 +383,7 @@ function auditFiscalDocs(docs: Doc[]): AuditFinding[] {
     if (!digits || !name) continue;
     if (!byDoc.has(digits)) byDoc.set(digits, new Map());
     const m = byDoc.get(digits)!;
-    const k = name.toLowerCase();
+    const k = nameKey(name);
     if (!m.has(k)) m.set(k, []);
     m.get(k)!.push(d);
   }
