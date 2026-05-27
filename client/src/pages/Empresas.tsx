@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { onlyDigits, maskMoney, parseBRLNum, formatBRL } from "@/lib/currency";
+import { onlyDigits, maskMoney, parseBRLNum, parsePercent, formatBRL } from "@/lib/currency";
 import {
   Building2,
   Plus,
@@ -98,6 +98,10 @@ const PLANEJAMENTO = [
   "Usar para investimento", "Usar para operação", "Deixar para sucessão", "Separar do risco pessoal",
 ];
 
+type BankRow = { nomeBanco: string; numeroBanco: string; agencia: string; conta: string; gerente: string };
+
+const emptyBank: BankRow = { nomeBanco: "", numeroBanco: "", agencia: "", conta: "", gerente: "" };
+
 type Partner = {
   id: number;
   companyId: number;
@@ -142,6 +146,7 @@ type Company = {
   status: string;
   capitalSocial?: string | null;
   valorEstimado?: string | null;
+  bancos: BankRow[];
   riscos: string[];
   riscoNivel: string;
   planejamento?: string | null;
@@ -187,6 +192,7 @@ export default function Empresas() {
   const [form, setForm] = useState({ ...emptyForm });
   const [temCertificado, setTemCertificado] = useState(false);
   const [riscos, setRiscos] = useState<string[]>([]);
+  const [bancos, setBancos] = useState<BankRow[]>([]);
 
   // Partner sub-form (doubles as add/edit).
   const [partnerForm, setPartnerForm] = useState({ ...emptyPartner });
@@ -233,6 +239,7 @@ export default function Empresas() {
     setForm({ ...emptyForm });
     setTemCertificado(false);
     setRiscos([]);
+    setBancos([]);
     setPendingSocios([]);
     resetPartner();
     setOpen(true);
@@ -253,7 +260,7 @@ export default function Empresas() {
   ) {
     for (const s of socios) {
       const digits = onlyDigits(s.cpfCnpj);
-      const pct = parseBRLNum(s.percentual);
+      const pct = parsePercent(s.percentual);
       await addPartnerMut.mutateAsync({
         companyId,
         nome: s.nome,
@@ -285,6 +292,7 @@ export default function Empresas() {
     });
     setTemCertificado(c.temCertificado === 1);
     setRiscos(c.riscos ?? []);
+    setBancos(c.bancos ?? []);
     setPendingSocios([]);
     resetPartner();
     setOpen(true);
@@ -296,6 +304,7 @@ export default function Empresas() {
     valorEstimado: form.valorEstimado ? String(parseBRLNum(form.valorEstimado)) : "",
     temCertificado,
     riscos,
+    bancos: bancos.filter((b) => b.nomeBanco.trim() || b.numeroBanco.trim() || b.agencia.trim() || b.conta.trim() || b.gerente.trim()),
     finalidade: form.finalidade as any,
     status: form.status as any,
     riscoNivel: form.riscoNivel as any,
@@ -360,7 +369,7 @@ export default function Empresas() {
     const base = {
       ...partnerForm,
       tipoParticipacao: partnerForm.tipoParticipacao as any,
-      percentual: partnerForm.percentual ? String(parseBRLNum(partnerForm.percentual)) : "",
+      percentual: partnerForm.percentual ? String(parsePercent(partnerForm.percentual)) : "",
       capitalSocial: partnerForm.capitalSocial ? String(parseBRLNum(partnerForm.capitalSocial)) : "",
       ...partnerFlags,
     };
@@ -554,7 +563,6 @@ export default function Empresas() {
                 <Field label="Endereço" full><Input value={form.endereco} onChange={(e) => setForm({ ...form, endereco: e.target.value })} /></Field>
                 <Field label="Contador responsável"><Input value={form.contador} onChange={(e) => setForm({ ...form, contador: e.target.value })} /></Field>
                 <Field label="Advogado responsável"><Input value={form.advogado} onChange={(e) => setForm({ ...form, advogado: e.target.value })} /></Field>
-                <Field label="Banco principal"><Input value={form.bancoPrincipal} onChange={(e) => setForm({ ...form, bancoPrincipal: e.target.value })} /></Field>
                 <Field label="Capital social (R$)"><Input value={form.capitalSocial} onChange={(e) => setForm({ ...form, capitalSocial: maskMoney(e.target.value) })} /></Field>
                 <Field label="Última alteração contratual"><Input type="date" value={form.ultimaAlteracao} onChange={(e) => setForm({ ...form, ultimaAlteracao: e.target.value })} /></Field>
                 <Field label="Finalidade">
@@ -600,6 +608,31 @@ export default function Empresas() {
                   </div>
                 )}
               </div>
+
+              <div className="rounded-md border border-border/60 p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Bancos / contas</span>
+                  <Button type="button" variant="outline" size="sm" className="gap-2 h-8" onClick={() => setBancos((prev) => [...prev, { ...emptyBank }])}>
+                    <Plus className="h-3.5 w-3.5" /> Adicionar banco
+                  </Button>
+                </div>
+                {bancos.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Nenhum banco cadastrado. Adicione as contas da empresa.</p>
+                ) : (
+                  bancos.map((b, i) => (
+                    <div key={i} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end border-t border-border/40 pt-3 first:border-0 first:pt-0">
+                      <div className="sm:col-span-4 space-y-1"><Label className="text-[11px] text-muted-foreground">Banco (nome)</Label><Input className="h-8" value={b.nomeBanco} onChange={(e) => setBancos((prev) => prev.map((x, j) => j === i ? { ...x, nomeBanco: e.target.value } : x))} /></div>
+                      <div className="sm:col-span-2 space-y-1"><Label className="text-[11px] text-muted-foreground">Nº banco</Label><Input className="h-8" value={b.numeroBanco} onChange={(e) => setBancos((prev) => prev.map((x, j) => j === i ? { ...x, numeroBanco: e.target.value } : x))} /></div>
+                      <div className="sm:col-span-2 space-y-1"><Label className="text-[11px] text-muted-foreground">Agência</Label><Input className="h-8" value={b.agencia} onChange={(e) => setBancos((prev) => prev.map((x, j) => j === i ? { ...x, agencia: e.target.value } : x))} /></div>
+                      <div className="sm:col-span-2 space-y-1"><Label className="text-[11px] text-muted-foreground">Conta</Label><Input className="h-8" value={b.conta} onChange={(e) => setBancos((prev) => prev.map((x, j) => j === i ? { ...x, conta: e.target.value } : x))} /></div>
+                      <div className="sm:col-span-2 space-y-1"><Label className="text-[11px] text-muted-foreground">Gerente</Label><Input className="h-8" value={b.gerente} onChange={(e) => setBancos((prev) => prev.map((x, j) => j === i ? { ...x, gerente: e.target.value } : x))} /></div>
+                      <div className="sm:col-span-12 flex justify-end">
+                        <Button type="button" variant="ghost" size="sm" className="h-7 text-red-400 gap-1" onClick={() => setBancos((prev) => prev.filter((_, j) => j !== i))}><Trash2 className="h-3.5 w-3.5" /> Remover</Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </TabsContent>
 
             <TabsContent value="socios" className="space-y-3">
@@ -627,7 +660,7 @@ export default function Empresas() {
                       ))}
                     </div>
                     {(() => {
-                      const total = pendingSocios.reduce((s, p) => s + parseBRLNum(p.percentual), 0) / 100;
+                      const total = pendingSocios.reduce((s, p) => s + parsePercent(p.percentual), 0);
                       return (
                         <p className={`text-xs ${Math.abs(total - 100) < 0.01 ? "text-muted-foreground" : "text-amber-400"}`}>
                           Soma das participações: {total.toFixed(2)}%{Math.abs(total - 100) < 0.01 ? "" : " (deveria somar 100%)"}

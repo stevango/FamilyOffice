@@ -8,6 +8,14 @@ export function parseBRLNum(v?: string): number {
   return Number.isFinite(f) ? f : 0;
 }
 
+/** Parse a percentage input ("50", "33,3", "50.5") to a number (0–999.999). */
+export function parsePercent(v?: string): number {
+  if (!v) return 0;
+  const n = parseFloat(String(v).replace(/[^\d.,]/g, "").replace(",", "."));
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(Math.max(n, 0), 999.999);
+}
+
 export function formatBRL(n: number): string {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }

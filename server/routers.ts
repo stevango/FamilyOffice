@@ -834,6 +834,7 @@ export const appRouter = router({
       return comps.map((c) => ({
         ...c,
         riscos: (() => { try { return c.riscos ? (JSON.parse(c.riscos) as string[]) : []; } catch { return []; } })(),
+        bancos: (() => { try { return c.bancos ? (JSON.parse(c.bancos) as Array<Record<string, string>>) : []; } catch { return []; } })(),
         partners: byCompany.get(c.id) ?? [],
       }));
     }),
@@ -853,6 +854,13 @@ export const appRouter = router({
       contador: z.string().optional(),
       advogado: z.string().optional(),
       bancoPrincipal: z.string().optional(),
+      bancos: z.array(z.object({
+        nomeBanco: z.string().optional(),
+        numeroBanco: z.string().optional(),
+        agencia: z.string().optional(),
+        conta: z.string().optional(),
+        gerente: z.string().optional(),
+      })).optional(),
       temCertificado: z.boolean().optional(),
       certificadoVencimento: z.string().optional(),
       certificadoFileKey: z.string().optional(),
@@ -867,12 +875,13 @@ export const appRouter = router({
       planejamento: z.string().optional(),
       notes: z.string().optional(),
     })).mutation(async ({ ctx, input }) => {
-      const { riscos, temCertificado, ...rest } = input;
+      const { riscos, bancos, temCertificado, ...rest } = input;
       return db.createCompany({
         ...rest,
         householdId: ctx.user.householdId,
         temCertificado: temCertificado ? 1 : 0,
         riscos: riscos ? JSON.stringify(riscos) : null,
+        bancos: bancos ? JSON.stringify(bancos) : null,
         dataAbertura: rest.dataAbertura || null,
         certificadoVencimento: rest.certificadoVencimento || null,
         ultimaAlteracao: rest.ultimaAlteracao || null,
@@ -897,6 +906,13 @@ export const appRouter = router({
       contador: z.string().optional(),
       advogado: z.string().optional(),
       bancoPrincipal: z.string().optional(),
+      bancos: z.array(z.object({
+        nomeBanco: z.string().optional(),
+        numeroBanco: z.string().optional(),
+        agencia: z.string().optional(),
+        conta: z.string().optional(),
+        gerente: z.string().optional(),
+      })).optional(),
       temCertificado: z.boolean().optional(),
       certificadoVencimento: z.string().optional(),
       certificadoFileKey: z.string().optional(),
@@ -911,9 +927,10 @@ export const appRouter = router({
       planejamento: z.string().optional(),
       notes: z.string().optional(),
     })).mutation(async ({ ctx, input }) => {
-      const { id, riscos, temCertificado, ...rest } = input;
+      const { id, riscos, bancos, temCertificado, ...rest } = input;
       const data: Record<string, unknown> = { ...rest };
       if (riscos !== undefined) data.riscos = riscos.length ? JSON.stringify(riscos) : null;
+      if (bancos !== undefined) data.bancos = bancos.length ? JSON.stringify(bancos) : null;
       if (temCertificado !== undefined) data.temCertificado = temCertificado ? 1 : 0;
       for (const k of ["dataAbertura", "certificadoVencimento", "ultimaAlteracao", "valorEstimado", "capitalSocial"]) {
         if (data[k] === "") data[k] = null;

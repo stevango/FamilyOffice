@@ -277,6 +277,8 @@ export const companies = mysqlTable("companies", {
   contador: varchar("contador", { length: 255 }),
   advogado: varchar("advogado", { length: 255 }),
   bancoPrincipal: varchar("bancoPrincipal", { length: 255 }),
+  /** Bank accounts (JSON array: nomeBanco, numeroBanco, agencia, conta, gerente). */
+  bancos: text("bancos"),
   temCertificado: int("temCertificado").default(0).notNull(),
   certificadoVencimento: date("certificadoVencimento", { mode: "string" }),
   certificadoFileKey: varchar("certificadoFileKey", { length: 500 }),
