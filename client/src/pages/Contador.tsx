@@ -976,7 +976,7 @@ export default function Contador() {
                               <span className="text-foreground/80">Crédito {credito}</span>
                             </>
                           )}
-                          {value && (
+                          {value && !isCons && (
                             <>
                               <span>·</span>
                               <span className="text-foreground/80">{value}</span>
