@@ -97,6 +97,16 @@ const categoryColors: Record<string, string> = {
   other: "bg-gray-500/10 text-gray-400",
 };
 
+/** A pending AI category suggestion awaiting the user's keep/switch choice. */
+type PendingCategory = {
+  args: { id?: number; fileKey?: string; mimeType?: string; category: string; classify?: boolean };
+  suggested: string;
+  current: string;
+  fields: Record<string, string>;
+  setMeta: (updater: (prev: Record<string, string>) => Record<string, string>) => void;
+  onCategory: (cat: string) => void;
+};
+
 function formatDate(date: string | Date) {
   return new Date(date).toLocaleDateString("pt-BR");
 }
@@ -503,6 +513,7 @@ export default function Documentos() {
   const [uploadedFile, setUploadedFile] = useState<{ key: string; url: string; fileName: string; fileSize: number; mimeType: string } | null>(null);
   const [metaForm, setMetaForm] = useState<Record<string, string>>({});
   const [analyzing, setAnalyzing] = useState(false);
+  const [pendingCat, setPendingCat] = useState<PendingCategory | null>(null);
 
   const analyzeMutation = trpc.documents.analyze.useMutation({ onError: () => {} });
   const aiExtractMutation = trpc.documents.aiExtract.useMutation();
@@ -527,6 +538,15 @@ export default function Documentos() {
   ) => {
     try {
       const res = await aiExtractMutation.mutateAsync(args);
+      // If the user manually picked a (real) category and the AI disagrees,
+      // ask before switching instead of silently changing it.
+      if (
+        args.classify && onCategory && res.category &&
+        res.category !== args.category && args.category !== "other"
+      ) {
+        setPendingCat({ args, suggested: res.category, current: args.category, fields: res.fields, setMeta, onCategory });
+        return;
+      }
       if (onCategory && res.category) onCategory(res.category);
       const filled = Object.keys(res.fields).length;
       fillEmpty(setMeta, res.fields);
@@ -540,6 +560,28 @@ export default function Documentos() {
     } catch (err: any) {
       toast.error(err?.message ?? "Falha na extração por IA");
     }
+  };
+
+  // When the AI suggests a different category, keep the user's choice and
+  // re-extract for it, so the filled fields match the chosen category's schema.
+  const keepChosenCategory = async (p: PendingCategory) => {
+    setPendingCat(null);
+    try {
+      const res = await aiExtractMutation.mutateAsync({ ...p.args, classify: false, category: p.current });
+      const filled = Object.keys(res.fields).length;
+      fillEmpty(p.setMeta, res.fields);
+      const label = categoryLabels[p.current] ?? p.current;
+      toast.success(filled > 0 ? `Mantida a categoria "${label}" — ${filled} campo(s)` : `Mantida a categoria "${label}"`);
+    } catch (err: any) {
+      toast.error(err?.message ?? "Falha na extração por IA");
+    }
+  };
+
+  const switchToSuggestedCategory = (p: PendingCategory) => {
+    setPendingCat(null);
+    p.onCategory(p.suggested);
+    fillEmpty(p.setMeta, p.fields);
+    toast.success(`Categoria alterada para "${categoryLabels[p.suggested] ?? p.suggested}"`);
   };
 
   const runAnalyze = async (fileKey: string, mimeType: string, category: string) => {
@@ -1355,6 +1397,33 @@ export default function Documentos() {
               <Button className="w-full" onClick={handleAddAsset} disabled={createAssetMutation.isPending}>
                 {createAssetMutation.isPending ? "Adicionando..." : "Adicionar ao patrimônio"}
               </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={pendingCat != null} onOpenChange={(v) => { if (!v) setPendingCat(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Categoria sugerida pela IA</DialogTitle>
+          </DialogHeader>
+          {pendingCat && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Você selecionou a categoria{" "}
+                <span className="font-medium text-foreground">{categoryLabels[pendingCat.current] ?? pendingCat.current}</span>,
+                mas a IA identificou que este documento parece ser{" "}
+                <span className="font-medium text-foreground">{categoryLabels[pendingCat.suggested] ?? pendingCat.suggested}</span>.
+                O que deseja fazer?
+              </p>
+              <div className="flex flex-col gap-2">
+                <Button onClick={() => switchToSuggestedCategory(pendingCat)}>
+                  Mudar para “{categoryLabels[pendingCat.suggested] ?? pendingCat.suggested}”
+                </Button>
+                <Button variant="outline" onClick={() => keepChosenCategory(pendingCat)}>
+                  Manter “{categoryLabels[pendingCat.current] ?? pendingCat.current}” e preencher os campos
+                </Button>
+              </div>
             </div>
           )}
         </DialogContent>
