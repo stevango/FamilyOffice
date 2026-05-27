@@ -602,10 +602,17 @@ export default function Contador() {
     </Button>
   );
 
-  const renderFinding = (f: AuditFinding, isReviewed: boolean) => (
+  const renderFinding = (f: AuditFinding, isReviewed: boolean, index?: number) => (
     <div key={f.id} className={`px-4 py-3 ${isReviewed ? "opacity-60" : ""}`}>
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
+          {index != null && (
+            <span
+              className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold shrink-0 ${f.level === "error" ? "bg-red-500/20 text-red-300" : "bg-amber-500/20 text-amber-300"}`}
+            >
+              {index}
+            </span>
+          )}
           <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${f.level === "error" ? "text-red-400" : "text-amber-400"}`} />
           <span className={`text-sm font-medium truncate ${f.level === "error" ? "text-red-400" : "text-amber-300"}`}>
             {f.title}
@@ -712,7 +719,7 @@ export default function Contador() {
                 {reprocessButton}
               </div>
               <div className="divide-y divide-border">
-                {activeFindings.map((f) => renderFinding(f, false))}
+                {activeFindings.map((f, i) => renderFinding(f, false, i + 1))}
               </div>
             </div>
           )}
