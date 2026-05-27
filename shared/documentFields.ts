@@ -47,7 +47,9 @@ const paymentFields: DocField[] = [
 
 export const CATEGORY_FIELDS: Record<string, DocField[]> = {
   vehicle: [
-    { key: "tipoDocumento", label: "Tipo de documento", options: ["CRLV", "CRV", "Laudo cautelar"] },
+    { key: "tipoDocumento", label: "Tipo de documento", options: ["CRLV", "CRV", "Laudo cautelar", "Nota fiscal"] },
+    { key: "numeroNf", label: "Número da NF", showWhen: [{ field: "tipoDocumento", value: "Nota fiscal" }] },
+    { key: "dataEmissaoNf", label: "Data de emissão da NF", showWhen: [{ field: "tipoDocumento", value: "Nota fiscal" }] },
     { key: "operacao", label: "Operação", options: ["Compra", "Venda"], showWhen: [{ field: "tipoDocumento", value: "CRV" }] },
     { key: "placa", label: "Placa" },
     { key: "renavam", label: "RENAVAM" },
