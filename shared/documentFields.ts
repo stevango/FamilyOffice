@@ -57,6 +57,8 @@ const informeRendimentoFields: DocField[] = [
   { key: "fonteCpf", label: "CPF da fonte pagadora", showWhen: [{ field: "fontePagadoraTipoPessoa", value: "Pessoa física" }] },
   { key: "beneficiario", label: "Beneficiário (nome)" },
   { key: "beneficiarioCpf", label: "CPF do beneficiário" },
+  { key: "agencia", label: "Agência" },
+  { key: "conta", label: "Conta" },
 ];
 
 export const CATEGORY_FIELDS: Record<string, DocField[]> = {
