@@ -10,8 +10,9 @@ export type DocField = {
   multi?: "consorcio" | "vehicle";
   /** For a "consorcio" multi field, only offer consórcios of these tipos. */
   multiTipos?: string[];
-  /** Only show this field when all listed conditions match (AND). */
-  showWhen?: Array<{ field: string; value: string }>;
+  /** Only show this field when all listed conditions match (AND). A condition
+   *  value can be a single string or a list (matches any of them). */
+  showWhen?: Array<{ field: string; value: string | string[] }>;
 };
 
 // Payment-method chain for a purchase paid without a consórcio (shared by
@@ -60,12 +61,16 @@ export const CATEGORY_FIELDS: Record<string, DocField[]> = {
     { key: "cor", label: "Cor" },
     { key: "combustivel", label: "Combustível", options: ["Gasolina", "Diesel", "Flex", "Elétrico", "Híbrido", "Plug-in", "Combustão"] },
     { key: "hodometro", label: "Hodômetro (km)" },
+    { key: "motor", label: "Motor (nº)" },
+    { key: "observacoesVeiculo", label: "Observações do veículo" },
+    { key: "exercicio", label: "Exercício", showWhen: [{ field: "tipoDocumento", value: "CRLV" }] },
+    { key: "codigoSegurancaCla", label: "Código de segurança do CLA", showWhen: [{ field: "tipoDocumento", value: "CRLV" }] },
     { key: "proprietario", label: "Proprietário" },
     { key: "proprietarioTipoPessoa", label: "Proprietário: tipo de pessoa", options: ["Pessoa física", "Pessoa jurídica"] },
     { key: "proprietarioCpf", label: "Proprietário: CPF", showWhen: [{ field: "proprietarioTipoPessoa", value: "Pessoa física" }] },
     { key: "proprietarioCnpj", label: "Proprietário: CNPJ", showWhen: [{ field: "proprietarioTipoPessoa", value: "Pessoa jurídica" }] },
     { key: "numeroAtpv", label: "Número ATPV-e", showWhen: [{ field: "tipoDocumento", value: "CRV" }] },
-    { key: "numeroCrv", label: "Número do CRV", showWhen: [{ field: "tipoDocumento", value: "CRV" }] },
+    { key: "numeroCrv", label: "Número do CRV", showWhen: [{ field: "tipoDocumento", value: ["CRLV", "CRV"] }] },
     { key: "codigoSegurancaCrv", label: "Código de segurança CRV", showWhen: [{ field: "tipoDocumento", value: "CRV" }] },
     { key: "dataEmissaoCrv", label: "Data de emissão do CRV", showWhen: [{ field: "tipoDocumento", value: "CRV" }] },
     { key: "valorCompra", label: "Valor da compra", showWhen: [{ field: "operacao", value: "Compra" }] },

@@ -215,7 +215,7 @@ function MetaFieldsBlock({
 }) {
   const [linkSearch, setLinkSearch] = useState("");
   const fields = fieldsForCategory(category).filter(
-    (f) => !f.showWhen || f.showWhen.every((c) => meta[c.field] === c.value),
+    (f) => !f.showWhen || f.showWhen.every((c) => Array.isArray(c.value) ? c.value.includes(meta[c.field]) : meta[c.field] === c.value),
   );
   if (fieldsForCategory(category).length === 0) return null;
   return (
