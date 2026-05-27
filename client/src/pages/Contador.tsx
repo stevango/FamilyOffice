@@ -119,6 +119,13 @@ function titular(doc: Doc): string {
   return [name, id].filter(Boolean).join(" · ") || "Sem titular informado";
 }
 
+/** For a vehicle document, whether it represents a purchase or a sale. */
+function operacao(doc: Doc): "Compra" | "Venda" | null {
+  if (doc.category !== "vehicle") return null;
+  const v = parseMeta(doc).operacao;
+  return v === "Compra" || v === "Venda" ? v : null;
+}
+
 /** Most relevant monetary value to display for the document, if any. */
 function relevantValue(doc: Doc): string | null {
   const m = parseMeta(doc);
@@ -318,6 +325,7 @@ export default function Contador() {
                   const sub = parseMeta(doc).subcategoria;
                   const label =
                     doc.category === "finance" && sub ? sub : CATEGORY_LABELS[doc.category] ?? doc.category;
+                  const op = operacao(doc);
                   return (
                     <div
                       key={doc.id}
@@ -331,6 +339,14 @@ export default function Contador() {
                           >
                             {label}
                           </Badge>
+                          {op && (
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] px-1.5 py-0 ${op === "Compra" ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-400" : "border-red-500/50 bg-red-500/10 text-red-400"}`}
+                            >
+                              {op}
+                            </Badge>
+                          )}
                           <p className="text-sm font-medium truncate">{doc.title}</p>
                         </div>
                         <div className="flex items-center gap-2 mt-1 flex-wrap text-xs text-muted-foreground">
