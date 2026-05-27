@@ -11,8 +11,9 @@ export type DocField = {
   /** For a "consorcio" multi field, only offer consórcios of these tipos. */
   multiTipos?: string[];
   /** Only show this field when all listed conditions match (AND). A condition
-   *  value can be a single string or a list (matches any of them). */
-  showWhen?: Array<{ field: string; value: string | string[] }>;
+   *  matches when the field's value equals `value` (or is one of the list); use
+   *  `valueNot` to match when the value is anything except the given value(s). */
+  showWhen?: Array<{ field: string; value?: string | string[]; valueNot?: string | string[] }>;
 };
 
 // Payment-method chain for a purchase paid without a consórcio (shared by
@@ -51,6 +52,9 @@ export const CATEGORY_FIELDS: Record<string, DocField[]> = {
     { key: "tipoDocumento", label: "Tipo de documento", options: ["CRLV", "CRV", "Laudo cautelar", "Nota fiscal"] },
     { key: "numeroNf", label: "Número da NF", showWhen: [{ field: "tipoDocumento", value: "Nota fiscal" }] },
     { key: "dataEmissaoNf", label: "Data de emissão da NF", showWhen: [{ field: "tipoDocumento", value: "Nota fiscal" }] },
+    { key: "naturezaOperacao", label: "Natureza da operação", showWhen: [{ field: "tipoDocumento", value: "Nota fiscal" }] },
+    { key: "valorTotalNota", label: "Valor total da nota", showWhen: [{ field: "tipoDocumento", value: "Nota fiscal" }] },
+    { key: "descricaoProduto", label: "Descrição do produto/serviço", showWhen: [{ field: "tipoDocumento", value: "Nota fiscal" }] },
     { key: "operacao", label: "Operação", options: ["Compra", "Venda"], showWhen: [{ field: "tipoDocumento", value: "CRV" }] },
     { key: "statusVeiculo", label: "Situação do veículo", options: ["Em posse", "Vendido", "Não informar"] },
     { key: "placa", label: "Placa" },
@@ -61,9 +65,9 @@ export const CATEGORY_FIELDS: Record<string, DocField[]> = {
     { key: "anoModelo", label: "Ano modelo" },
     { key: "cor", label: "Cor" },
     { key: "combustivel", label: "Combustível", options: ["Gasolina", "Diesel", "Flex", "Elétrico", "Híbrido", "Plug-in", "Combustão"] },
-    { key: "hodometro", label: "Hodômetro (km)" },
-    { key: "motor", label: "Motor (nº)" },
-    { key: "observacoesVeiculo", label: "Observações do veículo" },
+    { key: "hodometro", label: "Hodômetro (km)", showWhen: [{ field: "tipoDocumento", valueNot: "Nota fiscal" }] },
+    { key: "motor", label: "Motor (nº)", showWhen: [{ field: "tipoDocumento", valueNot: "Nota fiscal" }] },
+    { key: "observacoesVeiculo", label: "Observações do veículo", showWhen: [{ field: "tipoDocumento", valueNot: "Nota fiscal" }] },
     { key: "exercicio", label: "Exercício", showWhen: [{ field: "tipoDocumento", value: "CRLV" }] },
     { key: "codigoSegurancaCla", label: "Código de segurança do CLA", showWhen: [{ field: "tipoDocumento", value: "CRLV" }] },
     { key: "proprietario", label: "Proprietário" },

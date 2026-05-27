@@ -231,7 +231,11 @@ function MetaFieldsBlock({
 }) {
   const [linkSearch, setLinkSearch] = useState("");
   const fields = fieldsForCategory(category).filter(
-    (f) => !f.showWhen || f.showWhen.every((c) => Array.isArray(c.value) ? c.value.includes(meta[c.field]) : meta[c.field] === c.value),
+    (f) => !f.showWhen || f.showWhen.every((c) => {
+      const v = meta[c.field];
+      if (c.valueNot !== undefined) return Array.isArray(c.valueNot) ? !c.valueNot.includes(v) : v !== c.valueNot;
+      return Array.isArray(c.value) ? c.value.includes(v) : v === c.value;
+    }),
   );
   if (fieldsForCategory(category).length === 0) return null;
   return (
