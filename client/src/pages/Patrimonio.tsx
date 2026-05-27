@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { fieldsForCategory } from "@shared/documentFields";
+import { maskMoney, parseBRLNum } from "@/lib/currency";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -145,7 +146,7 @@ export default function Patrimonio() {
     await createMutation.mutateAsync({
       name: transferForm.name,
       assetType: transferForm.assetType as any,
-      estimatedValue: transferForm.value,
+      estimatedValue: String(parseBRLNum(transferForm.value)),
       holderName: transfer.holderName || undefined,
       holderDocument: transfer.holderDocument || undefined,
     });
@@ -184,8 +185,8 @@ export default function Patrimonio() {
       name: form.name,
       assetType: form.assetType,
       description: form.description || undefined,
-      estimatedValue: form.estimatedValue,
-      acquisitionValue: form.acquisitionValue || undefined,
+      estimatedValue: String(parseBRLNum(form.estimatedValue)),
+      acquisitionValue: form.acquisitionValue ? String(parseBRLNum(form.acquisitionValue)) : undefined,
       acquisitionDate: form.acquisitionDate || undefined,
       location: form.location || undefined,
       holderName: form.holderName || undefined,
@@ -268,7 +269,7 @@ export default function Patrimonio() {
       )}
 
       {/* Alavancagem via consórcios (dos documentos) */}
-      {consorcio && consorcio.items.length > 0 && (
+      {consorcio && consorcio.count > 0 && (
         <Card className="bg-card border-border">
           <CardContent className="pt-4 space-y-4">
             <div className="flex items-center gap-2 flex-wrap">
@@ -276,7 +277,7 @@ export default function Patrimonio() {
               <span className="text-sm text-muted-foreground">Alavancagem via consórcios</span>
               <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{consorcio.count} vigente(s)</Badge>
               {consorcio.realizadoCount > 0 && (
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-emerald-400 border-emerald-500/40">{consorcio.realizadoCount} realizado(s)</Badge>
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-emerald-400 border-emerald-500/40">{consorcio.realizadoCount} contemplado(s) na aba Consórcios</Badge>
               )}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -309,7 +310,7 @@ export default function Patrimonio() {
               </p>
             )}
             <div className="space-y-2 pt-2 border-t border-border">
-              {consorcio.items.map((it) => {
+              {consorcio.items.filter((it) => !it.realizado).map((it) => {
                 const sub = [
                   it.tipo,
                   it.valorParcela > 0 ? `${formatCurrency(it.valorParcela)}/mês` : null,
@@ -320,7 +321,7 @@ export default function Patrimonio() {
                     key={it.id}
                     type="button"
                     onClick={() => setDetail(it)}
-                    className={`flex w-full items-center justify-between gap-3 text-xs text-left rounded-md px-1.5 py-1 -mx-1.5 hover:bg-accent/40 transition-colors ${it.realizado ? "opacity-60" : ""}`}
+                    className="flex w-full items-center justify-between gap-3 text-xs text-left rounded-md px-1.5 py-1 -mx-1.5 hover:bg-accent/40 transition-colors"
                   >
                     <span className="min-w-0">
                       <span className="block truncate text-muted-foreground">{it.administradora || it.title}</span>
@@ -328,12 +329,8 @@ export default function Patrimonio() {
                     </span>
                     <span className="flex items-center gap-2 shrink-0">
                       <span className="font-medium">{formatCurrency(it.credito)}</span>
-                      {it.realizado ? (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-emerald-400 border-emerald-500/40">Realizado</Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">{it.situacao}</Badge>
-                      )}
-                      <span className="text-muted-foreground w-9 text-right">{it.realizado ? "—" : `${it.pct}%`}</span>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">{it.situacao}</Badge>
+                      <span className="text-muted-foreground w-9 text-right">{it.pct}%</span>
                     </span>
                   </button>
                 );
@@ -394,11 +391,11 @@ export default function Patrimonio() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Valor Estimado (R$)</Label>
-                  <Input type="number" step="0.01" min="0" inputMode="decimal" required value={form.estimatedValue} onChange={(e) => setForm({ ...form, estimatedValue: e.target.value })} placeholder="0,00" />
+                  <Input inputMode="decimal" required value={form.estimatedValue} onChange={(e) => setForm({ ...form, estimatedValue: maskMoney(e.target.value) })} placeholder="R$ 0,00" />
                 </div>
                 <div className="space-y-2">
                   <Label>Valor Aquisição (R$)</Label>
-                  <Input type="number" step="0.01" value={form.acquisitionValue} onChange={(e) => setForm({ ...form, acquisitionValue: e.target.value })} placeholder="0,00" />
+                  <Input inputMode="decimal" value={form.acquisitionValue} onChange={(e) => setForm({ ...form, acquisitionValue: maskMoney(e.target.value) })} placeholder="R$ 0,00" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -435,7 +432,42 @@ export default function Patrimonio() {
       </div>
 
       {/* Assets List */}
-      {isLoading ? (
+      {activeTab === "consorcio" ? (
+        (consorcio?.items ?? []).filter((i: any) => i.realizado).length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {(consorcio?.items ?? []).filter((i: any) => i.realizado).map((it: any) => (
+              <Card key={it.id} className="bg-card border-border cursor-pointer hover:bg-accent/20 transition-colors" onClick={() => setDetail(it)}>
+                <CardContent className="pt-4">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="h-10 w-10 rounded-lg bg-sky-500/10 flex items-center justify-center shrink-0">
+                      <Coins className="h-5 w-5 text-sky-400" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm truncate">{it.administradora || it.title}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/40">Contemplado</Badge>
+                        {it.tipo && <Badge variant="outline" className="text-[10px]">{it.tipo}</Badge>}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-border">
+                    <p className="text-xs text-muted-foreground">Crédito (carta)</p>
+                    <p className="text-lg font-bold text-sky-400">{formatCurrency(it.credito)}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <Card className="bg-card border-border">
+            <CardContent className="flex flex-col items-center justify-center py-16">
+              <Coins className="h-12 w-12 text-muted-foreground/40 mb-3" />
+              <p className="text-sm text-muted-foreground">Nenhum consórcio contemplado</p>
+              <p className="text-xs text-muted-foreground mt-1">Consórcios vinculados a uma compra aparecem aqui</p>
+            </CardContent>
+          </Card>
+        )
+      ) : isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-32 w-full" />)}
         </div>
@@ -544,7 +576,7 @@ export default function Patrimonio() {
               </div>
               <div className="space-y-2">
                 <Label>Valor do bem (R$)</Label>
-                <Input type="number" step="0.01" min="0" inputMode="decimal" value={transferForm.value} onChange={(e) => setTransferForm({ ...transferForm, value: e.target.value })} placeholder="0,00" />
+                <Input inputMode="decimal" value={transferForm.value} onChange={(e) => setTransferForm({ ...transferForm, value: maskMoney(e.target.value) })} placeholder="R$ 0,00" />
               </div>
             </div>
             <div className="space-y-2">

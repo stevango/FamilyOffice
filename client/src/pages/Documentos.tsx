@@ -54,6 +54,7 @@ import {
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { downloadCsv } from "@/lib/export";
+import { onlyDigits, parseBRLNum, formatBRL, maskMoney } from "@/lib/currency";
 import { fieldsForCategory } from "@shared/documentFields";
 
 const categoryLabels: Record<string, string> = {
@@ -117,16 +118,6 @@ function parseMetadata(doc: { metadata?: string | null; category: string }): { l
 }
 
 // ---- Input masks (CPF/CNPJ, telefone, data) ----
-const onlyDigits = (s: string) => s.replace(/\D/g, "");
-function parseBRLNum(v?: string): number {
-  if (!v) return 0;
-  const n = v.replace(/[^\d,.-]/g, "").replace(/\./g, "").replace(",", ".");
-  const f = parseFloat(n);
-  return Number.isFinite(f) ? f : 0;
-}
-function formatBRL(n: number): string {
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
 function maskCpf(v: string): string {
   const d = onlyDigits(v).slice(0, 11);
   if (d.length > 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
@@ -163,6 +154,7 @@ function maskValue(key: string, value: string): string {
   if (k.endsWith("cpf")) return maskCpf(value);
   if (k.includes("telefone") || k.includes("celular") || k.includes("fone")) return maskPhone(value);
   if (k.includes("data") || k === "validade" || k === "vigencia" || k === "primeirahabilitacao") return maskDate(value);
+  if (k.includes("valor") || k === "lance" || k === "premio") return maskMoney(value);
   return value;
 }
 
@@ -437,7 +429,7 @@ export default function Documentos() {
     await createAssetMutation.mutateAsync({
       name: addAsset.name,
       assetType: addAsset.assetType as any,
-      estimatedValue: addAsset.value,
+      estimatedValue: String(parseBRLNum(addAsset.value)),
       holderName: addAsset.holder || undefined,
     });
   };
@@ -1285,7 +1277,7 @@ export default function Documentos() {
                 </div>
                 <div className="space-y-2">
                   <Label>Valor estimado (R$)</Label>
-                  <Input type="number" step="0.01" min="0" inputMode="decimal" value={addAsset.value} onChange={(e) => setAddAsset({ ...addAsset, value: e.target.value })} placeholder="0,00" />
+                  <Input inputMode="decimal" value={addAsset.value} onChange={(e) => setAddAsset({ ...addAsset, value: maskMoney(e.target.value) })} placeholder="R$ 0,00" />
                 </div>
               </div>
               <div className="space-y-2">
