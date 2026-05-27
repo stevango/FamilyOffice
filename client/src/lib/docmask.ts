@@ -1,4 +1,5 @@
 import { onlyDigits, maskMoney } from "@/lib/currency";
+import { fieldsForCategory } from "@shared/documentFields";
 
 // ---- Input masks (CPF/CNPJ, telefone, data) ----
 export function maskCpf(v: string): string {
@@ -39,6 +40,25 @@ export function maskValue(key: string, value: string): string {
   if (k.includes("data") || k === "validade" || k === "vigencia" || k === "primeirahabilitacao") return maskDate(value);
   if (k.includes("valor") || k === "lance" || k === "premio" || k.startsWith("rendimentos") || k === "impostoretido") return maskMoney(value);
   return value;
+}
+
+/** Drop metadata values for category fields that are currently hidden by their
+ *  `showWhen` rule, so stale values (e.g. a CPF left over after switching to
+ *  Pessoa jurídica) don't linger and confuse downstream logic. */
+export function pruneHiddenFields(category: string, meta: Record<string, string>): Record<string, string> {
+  const hidden = new Set<string>();
+  for (const f of fieldsForCategory(category)) {
+    if (!f.showWhen) continue;
+    const visible = f.showWhen.every((c) => {
+      const v = meta[c.field];
+      if (c.valueNot !== undefined) return Array.isArray(c.valueNot) ? !c.valueNot.includes(v) : v !== c.valueNot;
+      return Array.isArray(c.value) ? c.value.includes(v) : v === c.value;
+    });
+    if (!visible) hidden.add(f.key);
+  }
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(meta)) if (!hidden.has(k)) out[k] = v;
+  return out;
 }
 
 /** Estimated end date = adesão + N installments (months), as dd/mm/aaaa.

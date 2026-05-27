@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { onlyDigits } from "@/lib/currency";
-import { maskValue } from "@/lib/docmask";
+import { maskValue, pruneHiddenFields } from "@/lib/docmask";
 import { MetaFieldsBlock } from "@/components/MetaFieldsBlock";
 import { CATEGORY_LABELS } from "@shared/documentFields";
 import {
@@ -133,32 +133,52 @@ function fiscalYear(doc: Doc): string {
   );
 }
 
+/** The taxpayer (name + CPF/CNPJ) a document belongs to. Resolved per category
+ *  and, crucially, respecting the chosen "tipo de pessoa" so stale CPF/CNPJ
+ *  values left hidden in the metadata don't get picked by mistake. */
+function holder(doc: Doc): { name: string; doc: string } {
+  const m = parseMeta(doc);
+  const byTipo = (tipoField: string, cpfField: string, cnpjField: string) => {
+    const tp = m[tipoField];
+    if (tp === "Pessoa jurídica") return m[cnpjField] || "";
+    if (tp === "Pessoa física") return m[cpfField] || "";
+    return m[cnpjField] || m[cpfField] || "";
+  };
+  switch (doc.category) {
+    case "consorcio":
+      return { name: m.consorciado || "", doc: byTipo("tipoPessoa", "cpf", "cnpj") || m.cpfCnpj || "" };
+    case "vehicle":
+    case "property":
+      return { name: m.proprietario || "", doc: byTipo("proprietarioTipoPessoa", "proprietarioCpf", "proprietarioCnpj") };
+    case "contract":
+      return { name: m.contratanteNome || "", doc: byTipo("contratanteTipoPessoa", "contratanteCpf", "contratanteCnpj") };
+    case "company":
+      return { name: m.razaoSocial || m.nomeFantasia || "", doc: m.cnpj || "" };
+    case "tax":
+    case "ir":
+      return { name: "", doc: m.cpfCnpj || m.cnpj || m.cpf || "" };
+    case "informe_rendimento":
+    case "finance":
+      return { name: m.beneficiario || "", doc: m.beneficiarioCpf || "" };
+    case "personal":
+    case "cnh":
+      return { name: m.nome || "", doc: m.cpf || "" };
+    default:
+      return {
+        name: m.proprietario || m.consorciado || m.contratanteNome || m.razaoSocial || "",
+        doc: m.cpfCnpj || m.proprietarioCnpj || m.proprietarioCpf || m.cnpj || m.cpf || "",
+      };
+  }
+}
+
 /** Best-effort taxpayer name for the document. */
 function titularName(doc: Doc): string {
-  const m = parseMeta(doc);
-  return (
-    m.beneficiario ||
-    m.proprietario ||
-    m.consorciado ||
-    m.contratanteNome ||
-    m.razaoSocial ||
-    doc.ownerName ||
-    ""
-  );
+  return holder(doc).name || doc.ownerName || "";
 }
 
 /** Best-effort taxpayer document number (CPF/CNPJ) for the document. */
 function titularDoc(doc: Doc): string {
-  const m = parseMeta(doc);
-  return (
-    m.beneficiarioCpf ||
-    m.proprietarioCpf ||
-    m.proprietarioCnpj ||
-    m.cpf ||
-    m.cnpj ||
-    m.cpfCnpj ||
-    ""
-  );
+  return holder(doc).doc;
 }
 
 /** Whether the taxpayer is a person (PF) or company (PJ) — by document length
@@ -460,9 +480,10 @@ export default function Contador() {
       toast.error("Preencha o título");
       return;
     }
-    const metadata = Object.fromEntries(
+    const masked = Object.fromEntries(
       Object.entries(editMeta).filter(([, v]) => v && v.trim()).map(([k, v]) => [k, maskValue(k, v)]),
     );
+    const metadata = pruneHiddenFields(editCategory, masked);
     updateMutation.mutate({
       id: editing.id,
       title: editTitle,

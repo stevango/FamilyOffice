@@ -57,7 +57,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { downloadCsv } from "@/lib/export";
 import { parseBRLNum, formatBRL, maskMoney } from "@/lib/currency";
-import { maskValue, computeEncerramento } from "@/lib/docmask";
+import { maskValue, computeEncerramento, pruneHiddenFields } from "@/lib/docmask";
 import { MetaFieldsBlock } from "@/components/MetaFieldsBlock";
 import { fieldsForCategory } from "@shared/documentFields";
 
@@ -308,7 +308,7 @@ export default function Documentos() {
       toast.error("Preencha o título");
       return;
     }
-    const metadata = Object.fromEntries(Object.entries(editMeta).filter(([, v]) => v && v.trim()).map(([k, v]) => [k, maskValue(k, v)]));
+    const metadata = pruneHiddenFields(editForm.category, Object.fromEntries(Object.entries(editMeta).filter(([, v]) => v && v.trim()).map(([k, v]) => [k, maskValue(k, v)])));
     updateMutation.mutate({
       id: editingId,
       title: editForm.title,
@@ -600,7 +600,7 @@ export default function Documentos() {
       toast.error("Selecione um arquivo e preencha o título");
       return;
     }
-    const metadata = Object.fromEntries(Object.entries(metaForm).filter(([, v]) => v && v.trim()).map(([k, v]) => [k, maskValue(k, v)]));
+    const metadata = pruneHiddenFields(form.category, Object.fromEntries(Object.entries(metaForm).filter(([, v]) => v && v.trim()).map(([k, v]) => [k, maskValue(k, v)])));
     createMutation.mutate({
       title: form.title,
       description: form.description || undefined,
