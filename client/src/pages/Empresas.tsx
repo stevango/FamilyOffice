@@ -187,9 +187,10 @@ export default function Empresas() {
   const [partnerForm, setPartnerForm] = useState({ ...emptyPartner });
   const [editingPartnerId, setEditingPartnerId] = useState<number | null>(null);
   const [partnerFlags, setPartnerFlags] = useState({ isAdministrador: false, poderesBancarios: false, assinaContratos: false, possuiProcuracao: false });
+  const [pendingSocios, setPendingSocios] = useState<{ nome: string; qualificacao: string; cpfCnpj: string }[]>([]);
 
   const invalidate = () => utils.companies.list.invalidate();
-  const createMut = trpc.companies.create.useMutation({ onSuccess: () => { invalidate(); toast.success("Empresa cadastrada"); setOpen(false); } });
+  const createMut = trpc.companies.create.useMutation({ onSuccess: () => invalidate() });
   const updateMut = trpc.companies.update.useMutation({ onSuccess: () => { invalidate(); toast.success("Empresa atualizada"); } });
   const deleteMut = trpc.companies.delete.useMutation({ onSuccess: () => { invalidate(); toast.success("Empresa removida"); setOpen(false); } });
   const addPartnerMut = trpc.companies.addPartner.useMutation({ onSuccess: () => { invalidate(); resetPartner(); } });
@@ -210,8 +211,31 @@ export default function Empresas() {
     setForm({ ...emptyForm });
     setTemCertificado(false);
     setRiscos([]);
+    setPendingSocios([]);
     resetPartner();
     setOpen(true);
+  }
+
+  function qualToTipo(q: string): string {
+    const s = q.toLowerCase();
+    if (s.includes("administrador") && (s.includes("sócio") || s.includes("socio"))) return "socio_administrador";
+    if (s.includes("administrador")) return "administrador";
+    if (s.includes("procurador")) return "procurador";
+    return "socio";
+  }
+
+  async function importSocios(companyId: number, socios: { nome: string; qualificacao: string; cpfCnpj: string }[]) {
+    for (const s of socios) {
+      const digits = onlyDigits(s.cpfCnpj);
+      await addPartnerMut.mutateAsync({
+        companyId,
+        nome: s.nome,
+        cpfCnpj: digits.length === 11 || digits.length === 14 ? s.cpfCnpj : "",
+        tipoParticipacao: qualToTipo(s.qualificacao) as any,
+        funcao: s.qualificacao || undefined,
+      });
+    }
+    if (socios.length) toast.success(`${socios.length} sócio(s) importado(s) do CNPJ`);
   }
 
   function openEdit(c: Company) {
@@ -229,6 +253,7 @@ export default function Empresas() {
     });
     setTemCertificado(c.temCertificado === 1);
     setRiscos(c.riscos ?? []);
+    setPendingSocios([]);
     resetPartner();
     setOpen(true);
   }
@@ -243,10 +268,22 @@ export default function Empresas() {
     riscoNivel: form.riscoNivel as any,
   });
 
-  const save = () => {
+  const save = async () => {
     if (!form.razaoSocial.trim()) { toast.error("Informe a razão social"); return; }
-    if (editingId != null) updateMut.mutate({ id: editingId, ...payload() });
-    else createMut.mutate(payload());
+    try {
+      if (editingId != null) {
+        await updateMut.mutateAsync({ id: editingId, ...payload() });
+      } else {
+        const res = await createMut.mutateAsync(payload());
+        const newId = Number((res as any)?.id);
+        if (pendingSocios.length && newId) await importSocios(newId, pendingSocios);
+        setPendingSocios([]);
+        toast.success("Empresa cadastrada");
+        setOpen(false);
+      }
+    } catch (err: any) {
+      toast.error(err?.message ?? "Falha ao salvar");
+    }
   };
 
   const doLookup = async () => {
@@ -260,11 +297,20 @@ export default function Empresas() {
         razaoSocial: p.razaoSocial || f.razaoSocial || "",
         nomeFantasia: p.nomeFantasia || f.nomeFantasia || "",
         situacaoCadastral: f.situacao || p.situacaoCadastral,
+        regimeTributario: f.regimeTributario || p.regimeTributario,
         cnaePrincipal: f.cnae || p.cnaePrincipal,
+        cnaeSecundarios: f.cnaeSecundarios || p.cnaeSecundarios,
+        ramo: f.ramo || p.ramo,
         endereco: f.endereco || p.endereco,
         inscricaoEstadual: f.inscricaoEstadual || p.inscricaoEstadual,
+        dataAbertura: f.dataAberturaIso || p.dataAbertura,
       }));
-      toast.success("Dados da Receita carregados");
+      const socios = (res.socios ?? []) as { nome: string; qualificacao: string; cpfCnpj: string }[];
+      if (socios.length) {
+        if (editingId != null) await importSocios(editingId, socios);
+        else setPendingSocios(socios);
+      }
+      toast.success(`Dados da Receita carregados${socios.length ? ` · ${socios.length} sócio(s)` : ""}`);
     } catch (err: any) {
       toast.error(err?.message ?? "Falha na consulta de CNPJ");
     }
@@ -498,7 +544,19 @@ export default function Empresas() {
 
             <TabsContent value="socios" className="space-y-3">
               {editingId == null ? (
-                <p className="text-sm text-muted-foreground">Salve a empresa primeiro para adicionar sócios e vínculos.</p>
+                pendingSocios.length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-sm text-emerald-400">{pendingSocios.length} sócio(s) encontrados na Receita — serão adicionados ao salvar a empresa:</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {pendingSocios.map((s, i) => (
+                        <Badge key={i} variant="secondary" className="text-xs">{s.nome}{s.qualificacao ? ` · ${s.qualificacao}` : ""}</Badge>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Você poderá editar percentuais e poderes depois de salvar.</p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Salve a empresa primeiro para adicionar sócios — ou consulte o CNPJ para importar o quadro societário automaticamente.</p>
+                )
               ) : (
                 <>
                   {editing && editing.partners.length > 0 && (

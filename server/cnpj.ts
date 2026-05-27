@@ -52,10 +52,40 @@ export function mapCnpjResponse(d: any): CnpjLookup {
   }
   set("porte", d.descricao_porte || d.porte);
   set("endereco", joinEndereco(d));
+  // ISO date for native <input type="date"> consumers.
+  set("dataAberturaIso", d.data_inicio_atividade ? String(d.data_inicio_atividade).slice(0, 10) : undefined);
+  set("ramo", d.cnae_fiscal_descricao);
+  set("telefone", d.ddd_telefone_1 || d.ddd_telefone_2);
+  set("email", d.email);
+  set("capitalSocial", d.capital_social != null ? String(d.capital_social) : undefined);
+  set("dataSituacao", isoToBr(d.data_situacao_cadastral));
+  const regime = d.opcao_pelo_mei === true ? "MEI" : d.opcao_pelo_simples === true ? "Simples Nacional" : undefined;
+  set("regimeTributario", regime);
+  if (Array.isArray(d.inscricoes_estaduais) && d.inscricoes_estaduais.length) {
+    const ie = d.inscricoes_estaduais.find((x: any) => x?.ativo) ?? d.inscricoes_estaduais[0];
+    set("inscricaoEstadual", ie?.inscricao_estadual);
+  }
+  if (Array.isArray(d.cnaes_secundarios) && d.cnaes_secundarios.length) {
+    set("cnaeSecundarios", d.cnaes_secundarios.map((c: any) => [c.codigo, c.descricao].filter(Boolean).join(" - ")).join("; "));
+  }
   return out;
 }
 
-export async function lookupCnpj(rawCnpj: string): Promise<CnpjLookup> {
+export type CnpjSocio = { nome: string; qualificacao: string; cpfCnpj: string };
+
+/** Extract the partner list (QSA) from a BrasilAPI payload. */
+export function mapCnpjSocios(d: any): CnpjSocio[] {
+  if (!Array.isArray(d.qsa)) return [];
+  return d.qsa
+    .map((s: any) => ({
+      nome: String(s.nome_socio ?? s.nome ?? "").trim(),
+      qualificacao: String(s.qualificacao_socio ?? "").trim(),
+      cpfCnpj: String(s.cnpj_cpf_do_socio ?? "").trim(),
+    }))
+    .filter((s: CnpjSocio) => s.nome);
+}
+
+export async function lookupCnpj(rawCnpj: string): Promise<{ fields: CnpjLookup; socios: CnpjSocio[] }> {
   const cnpj = onlyDigits(rawCnpj);
   if (cnpj.length !== 14) {
     throw new ExternalLookupError("CNPJ inválido (precisa de 14 dígitos).");
@@ -64,5 +94,5 @@ export async function lookupCnpj(rawCnpj: string): Promise<CnpjLookup> {
     notFound: "CNPJ não encontrado na base da Receita.",
     unavailable: "Não foi possível consultar o CNPJ (serviço indisponível).",
   });
-  return mapCnpjResponse(data);
+  return { fields: mapCnpjResponse(data), socios: mapCnpjSocios(data) };
 }

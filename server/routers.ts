@@ -694,7 +694,8 @@ export const appRouter = router({
     /** Look up official company data by CNPJ (public Receita data via BrasilAPI). */
     lookupCnpj: writeProcedure.input(z.object({ cnpj: z.string() })).mutation(async ({ input }) => {
       try {
-        return { fields: await lookupCnpj(input.cnpj) };
+        const { fields, socios } = await lookupCnpj(input.cnpj);
+        return { fields, socios };
       } catch (err) {
         throw new TRPCError({
           code: err instanceof ExternalLookupError && err.notFound ? "NOT_FOUND" : "BAD_REQUEST",
