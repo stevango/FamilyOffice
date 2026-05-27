@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import { onlyDigits } from "@/lib/currency";
 import { copyToClipboard } from "@/lib/clipboard";
 import { maskValue, pruneHiddenFields } from "@/lib/docmask";
@@ -44,6 +45,8 @@ import {
   Undo2,
   RefreshCw,
   ArrowRightLeft,
+  Mail,
+  Copy,
 } from "lucide-react";
 
 type Doc = {
@@ -460,7 +463,12 @@ export default function Contador() {
   const [year, setYear] = useState<string>("all");
   const [tipo, setTipo] = useState<string>("all"); // all | PF | PJ
   const [holder, setHolder] = useState<string>("all"); // all | titularKey
-  const [bundling, setBundling] = useState<string | null>(null);
+  const packageLinkMut = trpc.documents.packageLink.useMutation();
+  const [pkgOpen, setPkgOpen] = useState(false);
+  const [pkgYear, setPkgYear] = useState("");
+  const [pkgDocs, setPkgDocs] = useState<Doc[]>([]);
+  const [pkgSelected, setPkgSelected] = useState<Set<number>>(new Set());
+  const [pkgUrl, setPkgUrl] = useState<string | null>(null);
   const [editing, setEditing] = useState<Doc | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editCategory, setEditCategory] = useState("other");
@@ -620,23 +628,44 @@ export default function Contador() {
     }
   };
 
-  const shareBundle = async (yr: string, docs: Doc[]) => {
-    setBundling(yr);
+  const openPackage = (yr: string, docs: Doc[]) => {
+    setPkgYear(yr);
+    setPkgDocs(docs);
+    setPkgSelected(new Set(docs.map((d) => d.id)));
+    setPkgUrl(null);
+    setPkgOpen(true);
+  };
+
+  const generatePackage = async () => {
+    const ids = Array.from(pkgSelected);
+    if (ids.length === 0) { toast.error("Selecione ao menos um documento"); return; }
     try {
-      const lines: string[] = [];
-      for (const d of docs) {
-        const { token } = await shareLinkMutation.mutateAsync({ id: d.id });
-        lines.push(`${d.title}: ${window.location.origin}/api/share/${token}`);
-      }
-      const who = selectedHolderName ? ` — ${selectedHolderName}` : "";
-      const text = `Documentos para o contador${who} — exercício ${yr} (links válidos por 7 dias):\n\n${lines.join("\n")}`;
-      if (await copyToClipboard(text)) toast.success(`${docs.length} link(s) do exercício ${yr} copiados`);
-      else window.prompt("Copie os links abaixo:", text);
+      const { token } = await packageLinkMut.mutateAsync({ ids });
+      setPkgUrl(`${window.location.origin}/api/package/${token}`);
     } catch (err: any) {
-      toast.error(err?.message ?? "Falha ao gerar os links do exercício");
-    } finally {
-      setBundling(null);
+      toast.error(err?.message ?? "Falha ao gerar o link do pacote");
     }
+  };
+
+  const copyPackage = async () => {
+    if (!pkgUrl) return;
+    if (await copyToClipboard(pkgUrl)) toast.success("Link copiado");
+    else window.prompt("Copie o link do pacote:", pkgUrl);
+  };
+
+  const emailPackage = () => {
+    if (!pkgUrl) return;
+    const who = selectedHolderName ? ` de ${selectedHolderName}` : "";
+    const subject = `Documentos para o contador — exercício ${pkgYear}`;
+    const body =
+      `Olá,\n\nSeguem os documentos${who} referentes ao exercício ${pkgYear}, para análise e declaração.\n\n` +
+      `Acesse tudo por este link:\n${pkgUrl}\n\n` +
+      `Instruções:\n` +
+      `• Clique no link acima para abrir a lista de documentos.\n` +
+      `• Em cada item, use "Abrir / Baixar" para visualizar ou salvar o arquivo.\n` +
+      `• O link é privado e expira em 7 dias.\n\n` +
+      `Qualquer dúvida, é só responder este e-mail.\n\nObrigado.`;
+    window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   };
 
   const flaggedCount = fiscalDocs.filter(flaggedForAccountant).length;
@@ -918,15 +947,10 @@ export default function Contador() {
                   variant="outline"
                   size="sm"
                   className="gap-2 h-8"
-                  disabled={bundling === yr}
-                  onClick={() => shareBundle(yr, docs)}
+                  onClick={() => openPackage(yr, docs)}
                 >
-                  {bundling === yr ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Link2 className="h-3.5 w-3.5" />
-                  )}
-                  Copiar links do exercício
+                  <Mail className="h-3.5 w-3.5" />
+                  Compartilhar com o contador
                 </Button>
               </div>
               <div className="divide-y divide-border">
@@ -1111,6 +1135,57 @@ export default function Contador() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Package share dialog */}
+      <Dialog open={pkgOpen} onOpenChange={setPkgOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Compartilhar com o contador — Exercício {pkgYear}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">Selecione o que enviar ({pkgSelected.size}/{pkgDocs.length})</p>
+              <div className="flex gap-2">
+                <button type="button" className="text-[11px] text-primary hover:underline" onClick={() => setPkgSelected(new Set(pkgDocs.map((d) => d.id)))}>Todos</button>
+                <button type="button" className="text-[11px] text-muted-foreground hover:underline" onClick={() => setPkgSelected(new Set())}>Nenhum</button>
+              </div>
+            </div>
+            <div className="max-h-64 overflow-y-auto divide-y divide-border rounded-md border border-border/60">
+              {pkgDocs.map((d) => (
+                <label key={d.id} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-accent/30">
+                  <Checkbox
+                    checked={pkgSelected.has(d.id)}
+                    onCheckedChange={(v) => setPkgSelected((prev) => {
+                      const n = new Set(prev);
+                      if (v) n.add(d.id); else n.delete(d.id);
+                      return n;
+                    })}
+                  />
+                  <span className="text-sm truncate">{d.title}</span>
+                </label>
+              ))}
+            </div>
+
+            {pkgUrl ? (
+              <div className="space-y-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3">
+                <p className="text-xs text-emerald-400">Link gerado — abre uma página com todos os documentos selecionados:</p>
+                <p className="text-[11px] break-all text-muted-foreground">{pkgUrl}</p>
+                <div className="flex gap-2">
+                  <Button size="sm" className="gap-2" onClick={emailPackage}><Mail className="h-3.5 w-3.5" /> Enviar por e-mail</Button>
+                  <Button size="sm" variant="outline" className="gap-2" onClick={copyPackage}><Copy className="h-3.5 w-3.5" /> Copiar link</Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex justify-end">
+                <Button className="gap-2" onClick={generatePackage} disabled={packageLinkMut.isPending || pkgSelected.size === 0}>
+                  {packageLinkMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+                  Gerar link do pacote
+                </Button>
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

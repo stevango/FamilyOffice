@@ -80,6 +80,28 @@ export async function verifyShareToken(token: string | undefined | null): Promis
   }
 }
 
+type PackagePayload = { householdId: number; docIds: number[] };
+
+/** Sign a public link for a bundle of documents (the accountant package). */
+export async function signPackageToken(payload: PackagePayload, expiresInMs = 7 * 24 * 60 * 60 * 1000): Promise<string> {
+  const exp = Math.floor((Date.now() + expiresInMs) / 1000);
+  return new SignJWT({ kind: "package", householdId: payload.householdId, docIds: payload.docIds })
+    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+    .setExpirationTime(exp)
+    .sign(secretKey());
+}
+
+export async function verifyPackageToken(token: string | undefined | null): Promise<PackagePayload | null> {
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, secretKey(), { algorithms: ["HS256"] });
+    if (payload.kind !== "package" || typeof payload.householdId !== "number" || !Array.isArray(payload.docIds)) return null;
+    return { householdId: payload.householdId, docIds: (payload.docIds as unknown[]).filter((x): x is number => typeof x === "number") };
+  } catch {
+    return null;
+  }
+}
+
 export async function verifySession(token: string | undefined | null): Promise<SessionPayload | null> {
   if (!token) return null;
   try {

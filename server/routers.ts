@@ -13,9 +13,11 @@ import {
   hashPassword,
   signSession,
   signShareToken,
+  signPackageToken,
   toPublicUser,
   verifyPassword,
   verifyShareToken,
+  verifyPackageToken,
 } from "./_core/session";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router, writeProcedure } from "./_core/trpc";
@@ -217,6 +219,92 @@ export function registerFileRoutes(app: Application) {
     res.set("Content-Disposition", `inline; filename="${encodeURIComponent(payload.fileName)}"`);
     res.send(buffer);
   });
+
+  // Public, styled package page bundling several documents for the accountant.
+  app.get("/api/package/:token", async (req: Request, res: Response) => {
+    const payload = await verifyPackageToken((req.params as Record<string, string>).token);
+    if (!payload) {
+      res.status(410).type("html").send(packageErrorHtml("Link do pacote inválido ou expirado."));
+      return;
+    }
+    const all = await db.getDocuments(payload.householdId);
+    const docs = all.filter((d) => payload.docIds.includes(d.id));
+    const household = await db.getHousehold(payload.householdId).catch(() => null);
+    const items = await Promise.all(
+      docs.map(async (d) => ({
+        title: d.title,
+        category: d.category,
+        fileName: d.fileName,
+        token: await signShareToken({
+          fileKey: d.fileKey,
+          fileName: d.fileName,
+          mimeType: d.mimeType ?? "application/octet-stream",
+          documentId: d.id,
+          householdId: payload.householdId,
+        }),
+      })),
+    );
+    res.type("html").send(renderPackageHtml(items, household?.name ?? "Família"));
+  });
+}
+
+function escapeHtml(s: string): string {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
+}
+
+function packageErrorHtml(message: string): string {
+  return `<!doctype html><html lang="pt-br"><body style="font-family:system-ui,sans-serif;background:#0a0a0a;color:#9a9a9a;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center"><p>${escapeHtml(message)}</p></body></html>`;
+}
+
+const PKG_CATEGORY_LABELS: Record<string, string> = {
+  personal: "Pessoal", cnh: "CNH", property: "Imóvel", vehicle: "Veículo", company: "Empresa",
+  legal: "Jurídico", tax: "Fiscal", ir: "Imposto de Renda", insurance: "Seguro", contract: "Contrato",
+  consorcio: "Consórcio", informe_rendimento: "Informe de rendimento", certificate: "Certidão",
+  finance: "Finanças", studies: "Estudos", other: "Outro",
+};
+
+function renderPackageHtml(items: Array<{ title: string; category: string; fileName: string; token: string }>, household: string): string {
+  const rows = items.map((it) => {
+    const url = `/api/share/${it.token}`;
+    const cat = PKG_CATEGORY_LABELS[it.category] ?? it.category;
+    return `<li class="doc">
+      <div class="doc-info"><span class="cat">${escapeHtml(cat)}</span><span class="title">${escapeHtml(it.title)}</span></div>
+      <a class="btn" href="${url}" target="_blank" rel="noopener">Abrir / Baixar</a>
+    </li>`;
+  }).join("");
+  return `<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Documentos — ${escapeHtml(household)}</title>
+<style>
+  :root{color-scheme:dark}
+  *{box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#0a0a0b;color:#e7e7ea;margin:0;padding:24px}
+  .wrap{max-width:760px;margin:0 auto}
+  .head{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+  .head h1{font-size:20px;margin:0}
+  .sub{color:#9a9a9f;font-size:13px;margin:0 0 18px}
+  .note{background:#15151a;border:1px solid #26262e;border-radius:10px;padding:14px 16px;font-size:13px;color:#c9c9cf;margin-bottom:18px;line-height:1.5}
+  .note b{color:#fff}
+  ul{list-style:none;padding:0;margin:0;border:1px solid #26262e;border-radius:12px;overflow:hidden}
+  .doc{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid #1d1d24}
+  .doc:last-child{border-bottom:0}
+  .doc-info{min-width:0;display:flex;flex-direction:column;gap:4px}
+  .cat{font-size:11px;color:#8aa0ff;text-transform:uppercase;letter-spacing:.04em}
+  .title{font-size:14px;font-weight:600;word-break:break-word}
+  .btn{flex:none;background:#2563eb;color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:8px 14px;border-radius:8px;white-space:nowrap}
+  .btn:hover{background:#1d4ed8}
+  .foot{color:#6a6a70;font-size:12px;margin-top:18px;text-align:center}
+</style></head>
+<body><div class="wrap">
+  <div class="head"><h1>Documentos para o contador</h1></div>
+  <p class="sub">Enviado por <b>${escapeHtml(household)}</b> · ${items.length} documento(s)</p>
+  <div class="note">
+    <b>Instruções:</b> clique em <b>“Abrir / Baixar”</b> em cada documento para visualizar ou salvar o arquivo.
+    Os links são <b>privados e expiram em 7 dias</b> — não compartilhe esta página com terceiros.
+    Em caso de dúvida sobre algum documento, responda o e-mail que originou este link.
+  </div>
+  <ul>${rows || '<li class="doc"><span class="title">Nenhum documento disponível.</span></li>'}</ul>
+  <p class="foot">Página gerada automaticamente pelo Family Office · links válidos por 7 dias.</p>
+</div></body></html>`;
 }
 
 export const appRouter = router({
@@ -625,6 +713,11 @@ export const appRouter = router({
         documentId: doc.id,
         householdId: ctx.user.householdId,
       });
+      return { token };
+    }),
+    /** Sign a public link to a styled page bundling several documents. */
+    packageLink: protectedProcedure.input(z.object({ ids: z.array(z.number()).min(1) })).mutation(async ({ ctx, input }) => {
+      const token = await signPackageToken({ householdId: ctx.user.householdId, docIds: input.ids });
       return { token };
     }),
     /** Audit trail: recent accesses to public share links in the household. */
