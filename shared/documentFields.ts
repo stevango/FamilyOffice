@@ -162,6 +162,7 @@ export const CATEGORY_FIELDS: Record<string, DocField[]> = {
     { key: "valor", label: "Prêmio/Valor" },
   ],
   contract: [
+    { key: "numeroContrato", label: "Número do contrato" },
     { key: "objeto", label: "Objeto do contrato" },
     { key: "contratanteNome", label: "Contratante (nome)" },
     { key: "contratanteTipoPessoa", label: "Contratante: tipo de pessoa", options: ["Pessoa física", "Pessoa jurídica"] },
