@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { onlyDigits } from "@/lib/currency";
+import { copyToClipboard } from "@/lib/clipboard";
 import { maskValue, pruneHiddenFields } from "@/lib/docmask";
 import { MetaFieldsBlock } from "@/components/MetaFieldsBlock";
 import { CATEGORY_LABELS } from "@shared/documentFields";
@@ -612,8 +613,8 @@ export default function Contador() {
     try {
       const { token } = await shareLinkMutation.mutateAsync({ id: doc.id });
       const url = `${window.location.origin}/api/share/${token}`;
-      await navigator.clipboard.writeText(url);
-      toast.success("Link copiado (válido por 7 dias)");
+      if (await copyToClipboard(url)) toast.success("Link copiado (válido por 7 dias)");
+      else window.prompt("Copie o link do documento (válido por 7 dias):", url);
     } catch (err: any) {
       toast.error(err?.message ?? "Falha ao gerar o link");
     }
@@ -628,10 +629,9 @@ export default function Contador() {
         lines.push(`${d.title}: ${window.location.origin}/api/share/${token}`);
       }
       const who = selectedHolderName ? ` — ${selectedHolderName}` : "";
-      await navigator.clipboard.writeText(
-        `Documentos para o contador${who} — exercício ${yr} (links válidos por 7 dias):\n\n${lines.join("\n")}`,
-      );
-      toast.success(`${docs.length} link(s) do exercício ${yr} copiados`);
+      const text = `Documentos para o contador${who} — exercício ${yr} (links válidos por 7 dias):\n\n${lines.join("\n")}`;
+      if (await copyToClipboard(text)) toast.success(`${docs.length} link(s) do exercício ${yr} copiados`);
+      else window.prompt("Copie os links abaixo:", text);
     } catch (err: any) {
       toast.error(err?.message ?? "Falha ao gerar os links do exercício");
     } finally {

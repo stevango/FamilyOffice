@@ -58,6 +58,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { downloadCsv } from "@/lib/export";
 import { parseBRLNum, formatBRL, maskMoney } from "@/lib/currency";
 import { maskValue, computeEncerramento, pruneHiddenFields } from "@/lib/docmask";
+import { copyToClipboard } from "@/lib/clipboard";
 import { MetaFieldsBlock } from "@/components/MetaFieldsBlock";
 import { fieldsForCategory } from "@shared/documentFields";
 
@@ -531,8 +532,8 @@ export default function Documentos() {
       } else if (via === "email") {
         window.location.href = `mailto:?subject=${encodeURIComponent(doc.title)}&body=${encodeURIComponent(`Segue o documento "${doc.title}":\n${url}\n\n(link válido por 7 dias)`)}`;
       } else {
-        await navigator.clipboard.writeText(url);
-        toast.success("Link copiado (válido por 7 dias)");
+        if (await copyToClipboard(url)) toast.success("Link copiado (válido por 7 dias)");
+        else window.prompt("Copie o link do documento (válido por 7 dias):", url);
       }
     } catch (err: any) {
       toast.error(err?.message ?? "Falha ao gerar o link de compartilhamento");
