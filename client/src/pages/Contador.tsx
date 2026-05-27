@@ -160,7 +160,10 @@ function holder(doc: Doc): { name: string; doc: string } {
       return { name: "", doc: m.cpfCnpj || m.cnpj || m.cpf || "" };
     case "informe_rendimento":
     case "finance":
-      return { name: m.beneficiario || "", doc: m.beneficiarioCpf || "" };
+      return {
+        name: m.nome || m.beneficiario || "",
+        doc: byTipo("tipoPessoa", "cpf", "cnpj") || m.beneficiarioCpf || "",
+      };
     case "personal":
     case "cnh":
       return { name: m.nome || "", doc: m.cpf || "" };

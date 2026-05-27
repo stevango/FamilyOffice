@@ -51,14 +51,11 @@ const paymentFields: DocField[] = [
 // category and as the "Informe de Rendimento" subcategory inside Finanças.
 const informeRendimentoFields: DocField[] = [
   { key: "anoBase", label: "Ano-base / exercício" },
-  { key: "fontePagadora", label: "Fonte pagadora (nome)" },
-  { key: "fontePagadoraTipoPessoa", label: "Fonte pagadora: tipo de pessoa", options: ["Pessoa jurídica", "Pessoa física"] },
-  { key: "fonteCnpj", label: "CNPJ da fonte pagadora", showWhen: [{ field: "fontePagadoraTipoPessoa", value: "Pessoa jurídica" }] },
-  { key: "fonteCpf", label: "CPF da fonte pagadora", showWhen: [{ field: "fontePagadoraTipoPessoa", value: "Pessoa física" }] },
-  { key: "beneficiario", label: "Beneficiário (nome)" },
-  { key: "beneficiarioCpf", label: "CPF do beneficiário" },
-  { key: "agencia", label: "Agência" },
-  { key: "conta", label: "Conta" },
+  { key: "nome", label: "Nome" },
+  { key: "tipoPessoa", label: "Tipo de pessoa", options: ["Pessoa física", "Pessoa jurídica"] },
+  { key: "cpf", label: "CPF", showWhen: [{ field: "tipoPessoa", value: "Pessoa física" }] },
+  { key: "cnpj", label: "CNPJ", showWhen: [{ field: "tipoPessoa", value: "Pessoa jurídica" }] },
+  { key: "contador", label: "Nome do contador que fez o informe" },
 ];
 
 export const CATEGORY_FIELDS: Record<string, DocField[]> = {
