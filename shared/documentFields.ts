@@ -57,11 +57,6 @@ const informeRendimentoFields: DocField[] = [
   { key: "fonteCpf", label: "CPF da fonte pagadora", showWhen: [{ field: "fontePagadoraTipoPessoa", value: "Pessoa física" }] },
   { key: "beneficiario", label: "Beneficiário (nome)" },
   { key: "beneficiarioCpf", label: "CPF do beneficiário" },
-  { key: "tipoRendimento", label: "Tipo de rendimento", options: ["Salário", "Pró-labore", "Dividendos/Lucros", "Aluguel", "Aplicação financeira", "Aposentadoria/Pensão", "Outros"] },
-  { key: "rendimentosTributaveis", label: "Rendimentos tributáveis" },
-  { key: "rendimentosIsentos", label: "Rendimentos isentos / não tributáveis" },
-  { key: "rendimentosExclusivos", label: "Tributação exclusiva/definitiva" },
-  { key: "impostoRetido", label: "Imposto de renda retido na fonte" },
 ];
 
 export const CATEGORY_FIELDS: Record<string, DocField[]> = {
