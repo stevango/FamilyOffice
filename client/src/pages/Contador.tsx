@@ -543,13 +543,14 @@ export default function Contador() {
                   </div>
                   <div className="flex flex-wrap gap-1.5 mt-2">
                     {f.docs.map((d) => (
-                      <Link key={d.id} href={`/documentos?open=${d.id}`}>
+                      <Link key={d.id} href={`/documentos?edit=${d.id}`}>
                         <button
                           type="button"
-                          className="text-[11px] rounded bg-secondary/70 hover:bg-secondary px-2 py-0.5 text-foreground/90 max-w-[260px] truncate"
-                          title={`Abrir: ${d.title}`}
+                          className="inline-flex items-center gap-1 text-[11px] rounded bg-secondary/70 hover:bg-secondary px-2 py-0.5 text-foreground/90 max-w-[260px]"
+                          title={`Corrigir: ${d.title}`}
                         >
-                          {d.title}
+                          <Wrench className="h-2.5 w-2.5 shrink-0 text-primary" />
+                          <span className="truncate">{d.title}</span>
                         </button>
                       </Link>
                     ))}

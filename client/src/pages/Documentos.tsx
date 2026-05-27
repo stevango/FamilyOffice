@@ -918,14 +918,19 @@ export default function Documentos() {
     </div>
   );
 
-  // Deep link: /documentos?open=<id> opens that document's viewer once loaded.
+  // Deep link: ?open=<id> opens the viewer, ?edit=<id> opens the edit dialog.
   useEffect(() => {
     if (!documents) return;
     const params = new URLSearchParams(window.location.search);
     const openId = params.get("open");
-    if (!openId) return;
-    const doc = (documents as any[]).find((d) => String(d.id) === openId);
-    if (doc) setViewing(doc);
+    const editId = params.get("edit");
+    const id = openId ?? editId;
+    if (!id) return;
+    const doc = (documents as any[]).find((d) => String(d.id) === id);
+    if (doc) {
+      if (editId) openEdit(doc);
+      else setViewing(doc);
+    }
     window.history.replaceState(null, "", window.location.pathname);
   }, [documents]);
 
