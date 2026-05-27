@@ -164,6 +164,17 @@ function operacao(doc: Doc): "Compra" | "Venda" | null {
   return v === "Compra" || v === "Venda" ? v : null;
 }
 
+/** For a consórcio document, the underlying type (Veículo, Imóvel, ...). */
+function consorcioTipo(doc: Doc): string | null {
+  if (doc.category !== "consorcio") return null;
+  return parseMeta(doc).tipo || null;
+}
+
+/** Contract number, when the document carries one (consórcio/contrato). */
+function numeroContrato(doc: Doc): string | null {
+  return parseMeta(doc).numeroContrato || null;
+}
+
 /** Most relevant monetary value to display for the document, if any. */
 function relevantValue(doc: Doc): string | null {
   const m = parseMeta(doc);
@@ -454,6 +465,8 @@ export default function Contador() {
                   const label =
                     doc.category === "finance" && sub ? sub : CATEGORY_LABELS[doc.category] ?? doc.category;
                   const op = operacao(doc);
+                  const tipoCons = consorcioTipo(doc);
+                  const contrato = numeroContrato(doc);
                   return (
                     <div
                       key={doc.id}
@@ -475,9 +488,20 @@ export default function Contador() {
                               {op}
                             </Badge>
                           )}
+                          {tipoCons && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-sky-500/50 bg-sky-500/10 text-sky-400">
+                              {tipoCons}
+                            </Badge>
+                          )}
                           <p className="text-sm font-medium truncate">{doc.title}</p>
                         </div>
                         <div className="flex items-center gap-2 mt-1 flex-wrap text-xs text-muted-foreground">
+                          {contrato && (
+                            <>
+                              <span className="text-foreground/80">Contrato nº {contrato}</span>
+                              <span>·</span>
+                            </>
+                          )}
                           <span>{titular(doc)}</span>
                           <span>·</span>
                           <span>{formatDate(doc.createdAt)}</span>
