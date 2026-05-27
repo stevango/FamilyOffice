@@ -28,6 +28,7 @@ import {
   AlertTriangle,
   ShieldCheck,
   ShieldAlert,
+  Wrench,
 } from "lucide-react";
 
 type Doc = {
@@ -247,8 +248,14 @@ type AuditFinding = {
   level: "error" | "warning";
   title: string;
   detail: string;
+  fix: string;
   docs: Doc[];
 };
+
+/** Heuristic: does a name look like a company (PJ) rather than a person? */
+function looksLikeCompany(name: string): boolean {
+  return /\b(LTDA|EIRELI|EPP|MEI?|S\/?A|S\.A\.?)\b|HOLDING|VENTURE|CAPITAL|COMERCIO|COM[ÉE]RCIO|SERVI[ÇC]OS|INC\b|CORP\b/i.test(name);
+}
 
 /** Detect fiscal data inconsistencies the user should fix before sending. */
 function auditFiscalDocs(docs: Doc[]): AuditFinding[] {
@@ -258,11 +265,17 @@ function auditFiscalDocs(docs: Doc[]): AuditFinding[] {
   for (const d of docs) {
     const raw = titularDoc(d);
     if (raw && !isDocValid(raw)) {
+      const len = onlyDigits(raw).length;
+      const lenHint =
+        len !== 11 && len !== 14
+          ? ` O número tem ${len} dígito(s); CPF tem 11 e CNPJ tem 14.`
+          : " Os dígitos verificadores não conferem.";
       out.push({
         id: `invalid-${d.id}`,
         level: "error",
         title: "CPF/CNPJ inválido",
         detail: `${titularName(d) || "Titular"} — ${raw}`,
+        fix: `Abra o documento, confira o CPF/CNPJ no arquivo original e corrija o número.${lenHint}`,
         docs: [d],
       });
     }
@@ -288,6 +301,7 @@ function auditFiscalDocs(docs: Doc[]): AuditFinding[] {
         level: "warning",
         title: "Mesmo nome com CPF/CNPJ diferentes",
         detail: `"${titularName(all[0])}" aparece com: ${numbers}`,
+        fix: "Descubra qual número é o correto para esse titular e padronize o CPF/CNPJ em todos os documentos abaixo. Se forem entidades distintas que só têm nome parecido, ajuste o nome para diferenciá-las.",
         docs: all,
       });
     }
@@ -308,12 +322,23 @@ function auditFiscalDocs(docs: Doc[]): AuditFinding[] {
   for (const [digits, m] of Array.from(byDoc.entries())) {
     if (m.size > 1) {
       const all = Array.from(m.values()).reduce<Doc[]>((acc, arr) => acc.concat(arr), []);
-      const names = Array.from(m.values()).map((arr) => titularName(arr[0])).join(" × ");
+      const nameList = Array.from(m.values()).map((arr) => titularName(arr[0]));
+      const names = nameList.join(" × ");
+      let fix =
+        "Um mesmo CPF/CNPJ não pode pertencer a titulares diferentes. Confira nos documentos qual é o titular correto e padronize o nome — ou corrija o número que ficou no titular errado.";
+      if (digits.length === 11 && nameList.some(looksLikeCompany)) {
+        fix =
+          "Este número é um CPF (pessoa física), mas está associado ao nome de uma empresa. A empresa deve usar o próprio CNPJ — corrija o documento da empresa para informar o CNPJ correto.";
+      } else if (digits.length === 14 && nameList.some((n) => !looksLikeCompany(n))) {
+        fix =
+          "Este número é um CNPJ (empresa), mas está associado ao nome de uma pessoa física. Corrija para usar o CPF da pessoa, ou ajuste o nome para o da empresa dona do CNPJ.";
+      }
       out.push({
         id: `doc-${digits}`,
         level: "warning",
         title: "Mesmo CPF/CNPJ com nomes diferentes",
         detail: `${formatDoc(digits)} aparece como: ${names}`,
+        fix,
         docs: all,
       });
     }
@@ -327,6 +352,7 @@ function auditFiscalDocs(docs: Doc[]): AuditFinding[] {
       level: "warning",
       title: "Sem CPF/CNPJ do titular",
       detail: `${missing.length} documento(s) sem CPF/CNPJ informado`,
+      fix: "Abra cada documento e informe o CPF (pessoa física) ou CNPJ (empresa) do proprietário/titular, para o contador conseguir identificar a quem pertence.",
       docs: missing,
     });
   }
@@ -508,6 +534,13 @@ export default function Contador() {
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">{f.detail}</p>
+                  <div className="flex items-start gap-1.5 mt-2 rounded-md bg-secondary/50 px-2 py-1.5">
+                    <Wrench className="h-3 w-3 mt-0.5 shrink-0 text-primary" />
+                    <p className="text-[11px] text-foreground/80">
+                      <span className="font-medium text-foreground">Como corrigir: </span>
+                      {f.fix}
+                    </p>
+                  </div>
                   <div className="flex flex-wrap gap-1.5 mt-2">
                     {f.docs.map((d) => (
                       <Link key={d.id} href={`/documentos?open=${d.id}`}>
