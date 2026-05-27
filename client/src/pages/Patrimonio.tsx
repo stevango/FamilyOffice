@@ -467,6 +467,13 @@ export default function Patrimonio() {
                   <div className="mt-3 pt-3 border-t border-border">
                     <p className="text-xs text-muted-foreground">Crédito (carta)</p>
                     <p className="text-lg font-bold text-sky-400">{formatCurrency(it.credito)}</p>
+                    {it.vinculo && (
+                      <p className="text-[11px] text-muted-foreground mt-2">
+                        Vinculado a: <span className="text-foreground">{it.vinculo.descricao}</span>
+                        {it.vinculo.placa ? ` · placa ${it.vinculo.placa}` : ""}
+                        {it.vinculo.proprietario ? ` · ${it.vinculo.proprietario}` : ""}
+                      </p>
+                    )}
                   </div>
                 </CardContent>
               </Card>

@@ -47,7 +47,7 @@ const paymentFields: DocField[] = [
 
 export const CATEGORY_FIELDS: Record<string, DocField[]> = {
   vehicle: [
-    { key: "tipoDocumento", label: "Tipo de documento", options: ["CRLV", "CRV"] },
+    { key: "tipoDocumento", label: "Tipo de documento", options: ["CRLV", "CRV", "Laudo cautelar"] },
     { key: "operacao", label: "Operação", options: ["Compra", "Venda"], showWhen: [{ field: "tipoDocumento", value: "CRV" }] },
     { key: "placa", label: "Placa" },
     { key: "renavam", label: "RENAVAM" },

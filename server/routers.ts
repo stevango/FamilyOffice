@@ -511,13 +511,22 @@ export const appRouter = router({
       // Consórcios linked to a purchase (vehicle/property/...) are "realized" —
       // their credit became the asset, so they don't count toward leverage.
       const linkedConsorcioIds = new Set<number>();
+      const linkInfo = new Map<number, { placa: string; proprietario: string; descricao: string }>();
       for (const d of allDocs) {
         try {
           const m = d.metadata ? JSON.parse(d.metadata) : {};
-          String(m.consorciosVinculados ?? "").split(",").map((x: string) => parseInt(x, 10)).filter(Boolean).forEach((id: number) => linkedConsorcioIds.add(id));
+          const ids = String(m.consorciosVinculados ?? "").split(",").map((x: string) => parseInt(x, 10)).filter(Boolean);
+          if (ids.length === 0) continue;
+          const placa = m.placa ?? "";
+          const proprietario = m.proprietario ?? "";
+          const descricao = m.marcaModelo ? `${m.marcaModelo}${placa ? ` - ${placa}` : ""}` : (m.endereco || d.title);
+          ids.forEach((id: number) => {
+            linkedConsorcioIds.add(id);
+            if (!linkInfo.has(id)) linkInfo.set(id, { placa, proprietario, descricao });
+          });
         } catch { /* ignore */ }
       }
-      const items: Array<{ id: number; title: string; fileUrl: string; metadata: Record<string, string>; administradora: string; tipo: string; valorParcela: number; diaVencimento: string; credito: number; situacao: string; pago: number; total: number; pct: number; realizado: boolean }> = [];
+      const items: Array<{ id: number; title: string; fileUrl: string; metadata: Record<string, string>; administradora: string; tipo: string; valorParcela: number; diaVencimento: string; credito: number; situacao: string; pago: number; total: number; pct: number; realizado: boolean; vinculo: { placa: string; proprietario: string; descricao: string } | null }> = [];
       let totalCredito = 0, totalPago = 0, totalAPagar = 0, totalComprometido = 0;
       for (const doc of docs) {
         let meta: Record<string, string> = {};
@@ -555,6 +564,7 @@ export const appRouter = router({
           total,
           pct: total > 0 ? Math.min(100, Math.round((pago / total) * 100)) : 0,
           realizado,
+          vinculo: realizado ? (linkInfo.get(doc.id) ?? null) : null,
         });
       }
       items.sort((a, b) => (a.realizado ? 1 : 0) - (b.realizado ? 1 : 0) || b.credito - a.credito);
