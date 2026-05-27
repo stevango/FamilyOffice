@@ -7,6 +7,8 @@ import {
   assets, InsertAsset,
   bankAccounts, InsertBankAccount,
   cards, InsertCard,
+  companies, InsertCompany,
+  companyPartners, InsertCompanyPartner,
   documents, InsertDocument,
   fileBlobs,
   households,
@@ -333,6 +335,46 @@ export async function deleteDocument(id: number, householdId: number) {
     .limit(1);
   await getDb().delete(documents).where(and(eq(documents.id, id), inArray(documents.userId, memberIds(householdId))));
   return rows[0]?.fileKey;
+}
+
+// ============ COMPANIES (Mapa Societário) ============
+
+export async function getCompanies(householdId: number) {
+  return getDb().select().from(companies)
+    .where(eq(companies.householdId, householdId))
+    .orderBy(desc(companies.createdAt));
+}
+
+export async function getCompanyPartners(householdId: number) {
+  return getDb().select().from(companyPartners)
+    .where(eq(companyPartners.householdId, householdId));
+}
+
+export async function createCompany(data: InsertCompany) {
+  const result = await getDb().insert(companies).values(data);
+  return { id: result[0].insertId };
+}
+
+export async function updateCompany(id: number, householdId: number, data: Partial<InsertCompany>) {
+  await getDb().update(companies).set(data).where(and(eq(companies.id, id), eq(companies.householdId, householdId)));
+}
+
+export async function deleteCompany(id: number, householdId: number) {
+  await getDb().delete(companyPartners).where(and(eq(companyPartners.companyId, id), eq(companyPartners.householdId, householdId)));
+  await getDb().delete(companies).where(and(eq(companies.id, id), eq(companies.householdId, householdId)));
+}
+
+export async function createCompanyPartner(data: InsertCompanyPartner) {
+  const result = await getDb().insert(companyPartners).values(data);
+  return { id: result[0].insertId };
+}
+
+export async function updateCompanyPartner(id: number, householdId: number, data: Partial<InsertCompanyPartner>) {
+  await getDb().update(companyPartners).set(data).where(and(eq(companyPartners.id, id), eq(companyPartners.householdId, householdId)));
+}
+
+export async function deleteCompanyPartner(id: number, householdId: number) {
+  await getDb().delete(companyPartners).where(and(eq(companyPartners.id, id), eq(companyPartners.householdId, householdId)));
 }
 
 // ============ ASSETS ============

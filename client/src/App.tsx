@@ -49,6 +49,7 @@ const Financeiro = lazyWithReload(() => import("./pages/Financeiro"));
 const Documentos = lazyWithReload(() => import("./pages/Documentos"));
 const Contador = lazyWithReload(() => import("./pages/Contador"));
 const Patrimonio = lazyWithReload(() => import("./pages/Patrimonio"));
+const Empresas = lazyWithReload(() => import("./pages/Empresas"));
 const Juridico = lazyWithReload(() => import("./pages/Juridico"));
 const Familia = lazyWithReload(() => import("./pages/Familia"));
 const Assistente = lazyWithReload(() => import("./pages/Assistente"));
@@ -72,6 +73,7 @@ function AuthenticatedApp() {
           <Route path="/documentos" component={Documentos} />
           <Route path="/contador" component={Contador} />
           <Route path="/patrimonio" component={Patrimonio} />
+          <Route path="/empresas" component={Empresas} />
           <Route path="/juridico" component={Juridico} />
           <Route path="/familia" component={Familia} />
           <Route path="/assistente" component={Assistente} />

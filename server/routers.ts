@@ -815,6 +815,169 @@ export const appRouter = router({
     summary: protectedProcedure.query(async ({ ctx }) => db.getAssetsSummary(ctx.user.householdId)),
   }),
 
+  companies: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const [comps, parts] = await Promise.all([
+        db.getCompanies(ctx.user.householdId),
+        db.getCompanyPartners(ctx.user.householdId),
+      ]);
+      const byCompany = new Map<number, typeof parts>();
+      for (const p of parts) {
+        const list = byCompany.get(p.companyId) ?? [];
+        list.push(p);
+        byCompany.set(p.companyId, list);
+      }
+      return comps.map((c) => ({
+        ...c,
+        riscos: (() => { try { return c.riscos ? (JSON.parse(c.riscos) as string[]) : []; } catch { return []; } })(),
+        partners: byCompany.get(c.id) ?? [],
+      }));
+    }),
+    create: writeProcedure.input(z.object({
+      razaoSocial: z.string().min(1),
+      nomeFantasia: z.string().optional(),
+      cnpj: z.string().optional(),
+      inscricaoEstadual: z.string().optional(),
+      inscricaoMunicipal: z.string().optional(),
+      dataAbertura: z.string().optional(),
+      situacaoCadastral: z.string().optional(),
+      regimeTributario: z.string().optional(),
+      cnaePrincipal: z.string().optional(),
+      cnaeSecundarios: z.string().optional(),
+      ramo: z.string().optional(),
+      endereco: z.string().optional(),
+      contador: z.string().optional(),
+      advogado: z.string().optional(),
+      bancoPrincipal: z.string().optional(),
+      temCertificado: z.boolean().optional(),
+      certificadoVencimento: z.string().optional(),
+      ultimaAlteracao: z.string().optional(),
+      finalidade: z.enum(["operacional", "patrimonial", "holding", "investimento", "tecnologia", "seguros", "servicos", "consultoria", "imobiliaria", "veiculos", "familiar", "projeto_futuro", "risco", "encerramento", "reestruturacao", "sucessao", "outro"]).optional(),
+      status: z.enum(["ativa", "inativa", "baixada", "em_analise", "risco", "pendente"]).optional(),
+      valorEstimado: z.string().optional(),
+      riscos: z.array(z.string()).optional(),
+      riscoNivel: z.enum(["baixo", "medio", "alto", "critico"]).optional(),
+      planejamento: z.string().optional(),
+      notes: z.string().optional(),
+    })).mutation(async ({ ctx, input }) => {
+      const { riscos, temCertificado, ...rest } = input;
+      return db.createCompany({
+        ...rest,
+        householdId: ctx.user.householdId,
+        temCertificado: temCertificado ? 1 : 0,
+        riscos: riscos ? JSON.stringify(riscos) : null,
+        dataAbertura: rest.dataAbertura || null,
+        certificadoVencimento: rest.certificadoVencimento || null,
+        ultimaAlteracao: rest.ultimaAlteracao || null,
+        valorEstimado: rest.valorEstimado || null,
+      } as any);
+    }),
+    update: writeProcedure.input(z.object({
+      id: z.number(),
+      razaoSocial: z.string().min(1).optional(),
+      nomeFantasia: z.string().optional(),
+      cnpj: z.string().optional(),
+      inscricaoEstadual: z.string().optional(),
+      inscricaoMunicipal: z.string().optional(),
+      dataAbertura: z.string().optional(),
+      situacaoCadastral: z.string().optional(),
+      regimeTributario: z.string().optional(),
+      cnaePrincipal: z.string().optional(),
+      cnaeSecundarios: z.string().optional(),
+      ramo: z.string().optional(),
+      endereco: z.string().optional(),
+      contador: z.string().optional(),
+      advogado: z.string().optional(),
+      bancoPrincipal: z.string().optional(),
+      temCertificado: z.boolean().optional(),
+      certificadoVencimento: z.string().optional(),
+      ultimaAlteracao: z.string().optional(),
+      finalidade: z.enum(["operacional", "patrimonial", "holding", "investimento", "tecnologia", "seguros", "servicos", "consultoria", "imobiliaria", "veiculos", "familiar", "projeto_futuro", "risco", "encerramento", "reestruturacao", "sucessao", "outro"]).optional(),
+      status: z.enum(["ativa", "inativa", "baixada", "em_analise", "risco", "pendente"]).optional(),
+      valorEstimado: z.string().optional(),
+      riscos: z.array(z.string()).optional(),
+      riscoNivel: z.enum(["baixo", "medio", "alto", "critico"]).optional(),
+      planejamento: z.string().optional(),
+      notes: z.string().optional(),
+    })).mutation(async ({ ctx, input }) => {
+      const { id, riscos, temCertificado, ...rest } = input;
+      const data: Record<string, unknown> = { ...rest };
+      if (riscos !== undefined) data.riscos = riscos.length ? JSON.stringify(riscos) : null;
+      if (temCertificado !== undefined) data.temCertificado = temCertificado ? 1 : 0;
+      for (const k of ["dataAbertura", "certificadoVencimento", "ultimaAlteracao", "valorEstimado"]) {
+        if (data[k] === "") data[k] = null;
+      }
+      await db.updateCompany(id, ctx.user.householdId, data as any);
+      return { success: true };
+    }),
+    delete: writeProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+      await db.deleteCompany(input.id, ctx.user.householdId);
+      return { success: true };
+    }),
+    addPartner: writeProcedure.input(z.object({
+      companyId: z.number(),
+      nome: z.string().min(1),
+      cpfCnpj: z.string().optional(),
+      tipoParticipacao: z.enum(["socio", "socio_administrador", "socio_investidor", "administrador", "procurador", "representante", "terceiro"]).optional(),
+      percentual: z.string().optional(),
+      capitalSocial: z.string().optional(),
+      dataEntrada: z.string().optional(),
+      dataSaida: z.string().optional(),
+      funcao: z.string().optional(),
+      isAdministrador: z.boolean().optional(),
+      poderesBancarios: z.boolean().optional(),
+      assinaContratos: z.boolean().optional(),
+      possuiProcuracao: z.boolean().optional(),
+      observacoesRisco: z.string().optional(),
+    })).mutation(async ({ ctx, input }) => {
+      const { isAdministrador, poderesBancarios, assinaContratos, possuiProcuracao, ...rest } = input;
+      return db.createCompanyPartner({
+        ...rest,
+        householdId: ctx.user.householdId,
+        isAdministrador: isAdministrador ? 1 : 0,
+        poderesBancarios: poderesBancarios ? 1 : 0,
+        assinaContratos: assinaContratos ? 1 : 0,
+        possuiProcuracao: possuiProcuracao ? 1 : 0,
+        percentual: rest.percentual || null,
+        capitalSocial: rest.capitalSocial || null,
+        dataEntrada: rest.dataEntrada || null,
+        dataSaida: rest.dataSaida || null,
+      } as any);
+    }),
+    updatePartner: writeProcedure.input(z.object({
+      id: z.number(),
+      nome: z.string().min(1).optional(),
+      cpfCnpj: z.string().optional(),
+      tipoParticipacao: z.enum(["socio", "socio_administrador", "socio_investidor", "administrador", "procurador", "representante", "terceiro"]).optional(),
+      percentual: z.string().optional(),
+      capitalSocial: z.string().optional(),
+      dataEntrada: z.string().optional(),
+      dataSaida: z.string().optional(),
+      funcao: z.string().optional(),
+      isAdministrador: z.boolean().optional(),
+      poderesBancarios: z.boolean().optional(),
+      assinaContratos: z.boolean().optional(),
+      possuiProcuracao: z.boolean().optional(),
+      observacoesRisco: z.string().optional(),
+    })).mutation(async ({ ctx, input }) => {
+      const { id, isAdministrador, poderesBancarios, assinaContratos, possuiProcuracao, ...rest } = input;
+      const data: Record<string, unknown> = { ...rest };
+      if (isAdministrador !== undefined) data.isAdministrador = isAdministrador ? 1 : 0;
+      if (poderesBancarios !== undefined) data.poderesBancarios = poderesBancarios ? 1 : 0;
+      if (assinaContratos !== undefined) data.assinaContratos = assinaContratos ? 1 : 0;
+      if (possuiProcuracao !== undefined) data.possuiProcuracao = possuiProcuracao ? 1 : 0;
+      for (const k of ["percentual", "capitalSocial", "dataEntrada", "dataSaida"]) {
+        if (data[k] === "") data[k] = null;
+      }
+      await db.updateCompanyPartner(id, ctx.user.householdId, data as any);
+      return { success: true };
+    }),
+    removePartner: writeProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+      await db.deleteCompanyPartner(input.id, ctx.user.householdId);
+      return { success: true };
+    }),
+  }),
+
   // ============ LEGAL CASES ============
   legalCases: router({
     list: protectedProcedure.query(async ({ ctx }) => db.getLegalCases(ctx.user.householdId)),

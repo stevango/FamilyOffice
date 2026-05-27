@@ -254,3 +254,80 @@ export const shareAccessLogs = mysqlTable("share_access_logs", {
 
 export type ShareAccessLog = typeof shareAccessLogs.$inferSelect;
 export type InsertShareAccessLog = typeof shareAccessLogs.$inferInsert;
+
+/**
+ * Mapa Societário Familiar — companies the family holds a stake in. One row per
+ * company, household-scoped. Partners/participations live in `company_partners`.
+ */
+export const companies = mysqlTable("companies", {
+  id: int("id").autoincrement().primaryKey(),
+  householdId: int("householdId").notNull(),
+  razaoSocial: varchar("razaoSocial", { length: 500 }).notNull(),
+  nomeFantasia: varchar("nomeFantasia", { length: 500 }),
+  cnpj: varchar("cnpj", { length: 20 }),
+  inscricaoEstadual: varchar("inscricaoEstadual", { length: 50 }),
+  inscricaoMunicipal: varchar("inscricaoMunicipal", { length: 50 }),
+  dataAbertura: date("dataAbertura", { mode: "string" }),
+  situacaoCadastral: varchar("situacaoCadastral", { length: 100 }),
+  regimeTributario: varchar("regimeTributario", { length: 100 }),
+  cnaePrincipal: varchar("cnaePrincipal", { length: 255 }),
+  cnaeSecundarios: text("cnaeSecundarios"),
+  ramo: varchar("ramo", { length: 255 }),
+  endereco: varchar("endereco", { length: 500 }),
+  contador: varchar("contador", { length: 255 }),
+  advogado: varchar("advogado", { length: 255 }),
+  bancoPrincipal: varchar("bancoPrincipal", { length: 255 }),
+  temCertificado: int("temCertificado").default(0).notNull(),
+  certificadoVencimento: date("certificadoVencimento", { mode: "string" }),
+  ultimaAlteracao: date("ultimaAlteracao", { mode: "string" }),
+  finalidade: mysqlEnum("finalidade", [
+    "operacional", "patrimonial", "holding", "investimento", "tecnologia", "seguros",
+    "servicos", "consultoria", "imobiliaria", "veiculos", "familiar", "projeto_futuro",
+    "risco", "encerramento", "reestruturacao", "sucessao", "outro",
+  ]).default("operacional").notNull(),
+  status: mysqlEnum("status", ["ativa", "inativa", "baixada", "em_analise", "risco", "pendente"]).default("ativa").notNull(),
+  valorEstimado: decimal("valorEstimado", { precision: 15, scale: 2 }),
+  /** Selected risk tags (JSON array of strings). */
+  riscos: text("riscos"),
+  riscoNivel: mysqlEnum("riscoNivel", ["baixo", "medio", "alto", "critico"]).default("baixo").notNull(),
+  /** Strategic planning intent (manter, vender, encerrar, ...). */
+  planejamento: varchar("planejamento", { length: 100 }),
+  notes: text("notes"),
+  ...timestamps,
+}, (t) => [index("companies_householdId_idx").on(t.householdId)]);
+
+export type Company = typeof companies.$inferSelect;
+export type InsertCompany = typeof companies.$inferInsert;
+
+/**
+ * People linked to a company (sócios, administradores, procuradores, ...), with
+ * their participation, powers and risk notes.
+ */
+export const companyPartners = mysqlTable("company_partners", {
+  id: int("id").autoincrement().primaryKey(),
+  companyId: int("companyId").notNull(),
+  householdId: int("householdId").notNull(),
+  nome: varchar("nome", { length: 255 }).notNull(),
+  cpfCnpj: varchar("cpfCnpj", { length: 20 }),
+  tipoParticipacao: mysqlEnum("tipoParticipacao", [
+    "socio", "socio_administrador", "socio_investidor", "administrador",
+    "procurador", "representante", "terceiro",
+  ]).default("socio").notNull(),
+  percentual: decimal("percentual", { precision: 6, scale: 3 }),
+  capitalSocial: decimal("capitalSocial", { precision: 15, scale: 2 }),
+  dataEntrada: date("dataEntrada", { mode: "string" }),
+  dataSaida: date("dataSaida", { mode: "string" }),
+  funcao: varchar("funcao", { length: 255 }),
+  isAdministrador: int("isAdministrador").default(0).notNull(),
+  poderesBancarios: int("poderesBancarios").default(0).notNull(),
+  assinaContratos: int("assinaContratos").default(0).notNull(),
+  possuiProcuracao: int("possuiProcuracao").default(0).notNull(),
+  observacoesRisco: text("observacoesRisco"),
+  ...timestamps,
+}, (t) => [
+  index("company_partners_companyId_idx").on(t.companyId),
+  index("company_partners_householdId_idx").on(t.householdId),
+]);
+
+export type CompanyPartner = typeof companyPartners.$inferSelect;
+export type InsertCompanyPartner = typeof companyPartners.$inferInsert;

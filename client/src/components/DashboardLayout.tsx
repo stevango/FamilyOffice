@@ -35,6 +35,7 @@ import {
   Bot,
   Users,
   Calculator,
+  Network,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -46,6 +47,7 @@ const menuItems = [
   { icon: FileText, label: "Documentos", path: "/documentos" },
   { icon: Calculator, label: "Contador", path: "/contador" },
   { icon: Building2, label: "Patrimônio", path: "/patrimonio" },
+  { icon: Network, label: "Empresas", path: "/empresas" },
   { icon: Scale, label: "Jurídico", path: "/juridico" },
   { icon: Bot, label: "Assistente", path: "/assistente" },
   { icon: Users, label: "Família", path: "/familia" },
