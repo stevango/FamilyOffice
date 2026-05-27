@@ -110,9 +110,10 @@ function parseMetadata(doc: { metadata?: string | null; category: string }): { l
   try {
     const obj = JSON.parse(doc.metadata) as Record<string, string>;
     const fields = fieldsForCategory(doc.category);
-    return Object.entries(obj)
-      .filter(([k, v]) => v && !fields.find((f) => f.key === k)?.multi)
-      .map(([k, v]) => ({ label: fields.find((f) => f.key === k)?.label ?? k, value: String(v) }));
+    // Order by the category's field order (most relevant first); skip link fields.
+    return fields
+      .filter((f) => !f.multi && obj[f.key])
+      .map((f) => ({ label: f.label, value: String(obj[f.key]) }));
   } catch {
     return [];
   }
@@ -804,15 +805,26 @@ export default function Documentos() {
               </>
             )}
           </div>
-          {parseMetadata(doc).length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-              {parseMetadata(doc).map((m, i) => (
-                <span key={i} className="text-[10px] text-muted-foreground rounded bg-secondary/60 px-1.5 py-0.5">
-                  <span className="text-muted-foreground/70">{m.label}:</span> {m.value}
-                </span>
-              ))}
-            </div>
-          )}
+          {(() => {
+            const meta = parseMetadata(doc);
+            if (meta.length === 0) return null;
+            const shown = meta.slice(0, 4);
+            const extra = meta.length - shown.length;
+            return (
+              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                {shown.map((m, i) => (
+                  <span key={i} className="text-[10px] text-muted-foreground rounded bg-secondary/60 px-1.5 py-0.5">
+                    <span className="text-muted-foreground/70">{m.label}:</span> {m.value}
+                  </span>
+                ))}
+                {extra > 0 && (
+                  <button type="button" onClick={() => openEdit(doc)} className="text-[10px] text-primary hover:underline px-1">
+                    +{extra} {extra === 1 ? "campo" : "campos"}
+                  </button>
+                )}
+              </div>
+            );
+          })()}
           {(() => {
             const p = consorcioProgress(doc);
             if (!p) return null;
