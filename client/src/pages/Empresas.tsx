@@ -512,6 +512,7 @@ export default function Empresas() {
                 <Field label="Situação cadastral"><Input value={form.situacaoCadastral} onChange={(e) => setForm({ ...form, situacaoCadastral: e.target.value })} /></Field>
                 <Field label="Regime tributário"><Input value={form.regimeTributario} onChange={(e) => setForm({ ...form, regimeTributario: e.target.value })} placeholder="Simples, Presumido, Real" /></Field>
                 <Field label="CNAE principal"><Input value={form.cnaePrincipal} onChange={(e) => setForm({ ...form, cnaePrincipal: e.target.value })} /></Field>
+                <Field label="CNAEs secundários" full><Textarea rows={3} value={form.cnaeSecundarios} onChange={(e) => setForm({ ...form, cnaeSecundarios: e.target.value })} placeholder="Preenchido pela consulta de CNPJ" /></Field>
                 <Field label="Endereço" full><Input value={form.endereco} onChange={(e) => setForm({ ...form, endereco: e.target.value })} /></Field>
                 <Field label="Contador responsável"><Input value={form.contador} onChange={(e) => setForm({ ...form, contador: e.target.value })} /></Field>
                 <Field label="Advogado responsável"><Input value={form.advogado} onChange={(e) => setForm({ ...form, advogado: e.target.value })} /></Field>
