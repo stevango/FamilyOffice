@@ -940,6 +940,7 @@ export default function Contador() {
                   const tipoCons = consorcioTipo(doc);
                   const contrato = numeroContrato(doc);
                   const isCons = doc.category === "consorcio";
+                  const isInforme = doc.category === "informe_rendimento" || (doc.category === "finance" && dm.subcategoria === "Informe de Rendimento");
                   const credito = isCons ? dm.valorCredito : "";
                   const contemplada = isCons && /contempl/i.test(dm.situacao ?? "");
                   const vinculo = isCons ? consorcioLinks.get(doc.id) ?? null : null;
@@ -992,7 +993,7 @@ export default function Contador() {
                               <span className="text-foreground/80">Crédito {credito}</span>
                             </>
                           )}
-                          {value && !isCons && (
+                          {value && !isCons && !isInforme && (
                             <>
                               <span>·</span>
                               <span className="text-foreground/80">{value}</span>
