@@ -38,6 +38,7 @@ import {
   Bot,
   AlertTriangle,
   CheckCircle2,
+  XCircle,
   ChevronLeft,
   Eye,
   Share2,
@@ -70,6 +71,7 @@ const categoryLabels: Record<string, string> = {
   insurance: "Seguro",
   contract: "Contrato",
   consorcio: "Consórcio",
+  informe_rendimento: "Informe de rendimento",
   certificate: "Certidão",
   finance: "Finanças",
   studies: "Estudos",
@@ -88,6 +90,7 @@ const categoryColors: Record<string, string> = {
   insurance: "bg-cyan-500/10 text-cyan-400",
   contract: "bg-indigo-500/10 text-indigo-400",
   consorcio: "bg-sky-500/10 text-sky-400",
+  informe_rendimento: "bg-lime-500/10 text-lime-400",
   certificate: "bg-pink-500/10 text-pink-400",
   finance: "bg-green-500/10 text-green-400",
   studies: "bg-violet-500/10 text-violet-400",
@@ -110,9 +113,10 @@ function parseMetadata(doc: { metadata?: string | null; category: string }): { l
   try {
     const obj = JSON.parse(doc.metadata) as Record<string, string>;
     const fields = fieldsForCategory(doc.category);
-    // Order by the category's field order (most relevant first); skip link fields.
+    // Order by the category's field order (most relevant first); skip link fields
+    // and statusVeiculo (rendered as its own badge).
     return fields
-      .filter((f) => !f.multi && obj[f.key])
+      .filter((f) => !f.multi && f.key !== "statusVeiculo" && obj[f.key])
       .map((f) => ({ label: f.label, value: String(obj[f.key]) }));
   } catch {
     return [];
@@ -158,6 +162,18 @@ function maskValue(key: string, value: string): string {
   if (k.includes("data") || k === "validade" || k === "vigencia" || k === "primeirahabilitacao") return maskDate(value);
   if (k.includes("valor") || k === "lance" || k === "premio") return maskMoney(value);
   return value;
+}
+
+/** Vehicle possession status for the badge ("Em posse" / "Vendido"), or null
+ *  when not a vehicle, not set, or explicitly hidden ("Não informar"). */
+function vehicleStatus(doc: { category: string; metadata?: string | null }): "Em posse" | "Vendido" | null {
+  if (doc.category !== "vehicle" || !doc.metadata) return null;
+  try {
+    const v = (JSON.parse(doc.metadata) as Record<string, string>).statusVeiculo;
+    return v === "Em posse" || v === "Vendido" ? v : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Whether the saved AI summary flagged this document for the accountant (IR). */
@@ -774,6 +790,19 @@ export default function Documentos() {
         <div className="min-w-0">
           <p className="text-sm font-medium truncate">{doc.title}</p>
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+            {(() => {
+              const st = vehicleStatus(doc);
+              if (!st) return null;
+              return st === "Vendido" ? (
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-red-500/50 bg-red-500/10 text-red-400 gap-1">
+                  <XCircle className="h-2.5 w-2.5" /> Vendido
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-emerald-500/50 bg-emerald-500/10 text-emerald-400 gap-1">
+                  <CheckCircle2 className="h-2.5 w-2.5" /> Em posse
+                </Badge>
+              );
+            })()}
             {needsAccountant(doc) && (
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-500/50 bg-amber-500/10 text-amber-400 gap-1">
                 <AlertTriangle className="h-2.5 w-2.5" /> Comunicar ao contador (IR)

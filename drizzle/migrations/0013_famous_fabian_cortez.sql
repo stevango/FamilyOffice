@@ -1,0 +1,1 @@
+ALTER TABLE `documents` MODIFY COLUMN `category` enum('personal','cnh','property','vehicle','company','legal','tax','insurance','contract','certificate','finance','studies','ir','consorcio','informe_rendimento','other') NOT NULL DEFAULT 'other';

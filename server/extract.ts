@@ -176,6 +176,11 @@ export function extractFields(text: string, category: string): Record<string, st
       set("parcelas", detectParcelas(t));
       set("valorParcela", detectValor(t));
       break;
+    case "informe_rendimento":
+      set("cnpjFonte", detectCnpj(t));
+      set("cpfBeneficiario", detectCpf(t));
+      set("anoBase", detectYear(t));
+      break;
     case "certificate":
       set("dataEmissao", detectFirstDate(t));
       break;

@@ -700,7 +700,7 @@ export const appRouter = router({
     create: writeProcedure.input(z.object({
       title: z.string().min(1),
       description: z.string().optional(),
-      category: z.enum(["personal", "cnh", "property", "vehicle", "company", "legal", "tax", "insurance", "contract", "certificate", "finance", "studies", "ir", "consorcio", "other"]).default("other"),
+      category: z.enum(["personal", "cnh", "property", "vehicle", "company", "legal", "tax", "insurance", "contract", "certificate", "finance", "studies", "ir", "consorcio", "informe_rendimento", "other"]).default("other"),
       fileKey: z.string(),
       fileUrl: z.string(),
       fileName: z.string(),
@@ -735,7 +735,7 @@ export const appRouter = router({
       id: z.number(),
       title: z.string().min(1).optional(),
       description: z.string().optional(),
-      category: z.enum(["personal", "cnh", "property", "vehicle", "company", "legal", "tax", "insurance", "contract", "certificate", "finance", "studies", "ir", "consorcio", "other"]).optional(),
+      category: z.enum(["personal", "cnh", "property", "vehicle", "company", "legal", "tax", "insurance", "contract", "certificate", "finance", "studies", "ir", "consorcio", "informe_rendimento", "other"]).optional(),
       tags: z.string().optional(),
       expiresAt: z.string().optional(),
       metadata: z.record(z.string(), z.string()).optional(),
