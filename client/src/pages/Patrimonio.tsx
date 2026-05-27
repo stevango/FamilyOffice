@@ -39,6 +39,7 @@ import {
   Coins,
   ArrowRightLeft,
   FileText,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { downloadCsv } from "@/lib/export";
@@ -95,6 +96,7 @@ export default function Patrimonio() {
   const { data: consorcio } = trpc.documents.consorcioLeverage.useQuery();
   const [, setLocation] = useLocation();
   const [detail, setDetail] = useState<any | null>(null);
+  const [showConsorcioList, setShowConsorcioList] = useState(false);
 
   const createMutation = trpc.assets.create.useMutation({
     onSuccess: () => {
@@ -309,7 +311,18 @@ export default function Patrimonio() {
                 Alavancagem: <span className="text-foreground font-medium">{(consorcio.totalCredito / consorcio.totalPago).toFixed(1)}×</span> — para cada R$ 1 já pago, ~{formatCurrency(consorcio.totalCredito / consorcio.totalPago)} de crédito acessível.
               </p>
             )}
-            <div className="space-y-2 pt-2 border-t border-border">
+            <div className="pt-2 border-t border-border">
+              <button
+                type="button"
+                onClick={() => setShowConsorcioList((v) => !v)}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground focus:outline-none"
+              >
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showConsorcioList ? "" : "-rotate-90"}`} />
+                {showConsorcioList ? "Ocultar consórcios" : `Ver detalhado (${consorcio.count})`}
+              </button>
+            </div>
+            {showConsorcioList && (
+            <div className="space-y-2">
               {consorcio.items.filter((it) => !it.realizado).map((it) => {
                 const sub = [
                   it.tipo,
@@ -336,6 +349,7 @@ export default function Patrimonio() {
                 );
               })}
             </div>
+            )}
           </CardContent>
         </Card>
       )}
