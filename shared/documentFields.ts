@@ -47,6 +47,23 @@ const paymentFields: DocField[] = [
   { key: "cartaoTitularCnpj", label: "Titular: CNPJ", showWhen: [...CARTAO, { field: "cartaoTitularTipoPessoa", value: "Pessoa jurídica" }] },
 ];
 
+// Income-report (Informe de Rendimento) fields — used both as a standalone
+// category and as the "Informe de Rendimento" subcategory inside Finanças.
+const informeRendimentoFields: DocField[] = [
+  { key: "anoBase", label: "Ano-base / exercício" },
+  { key: "fontePagadora", label: "Fonte pagadora (nome)" },
+  { key: "fontePagadoraTipoPessoa", label: "Fonte pagadora: tipo de pessoa", options: ["Pessoa jurídica", "Pessoa física"] },
+  { key: "fonteCnpj", label: "CNPJ da fonte pagadora", showWhen: [{ field: "fontePagadoraTipoPessoa", value: "Pessoa jurídica" }] },
+  { key: "fonteCpf", label: "CPF da fonte pagadora", showWhen: [{ field: "fontePagadoraTipoPessoa", value: "Pessoa física" }] },
+  { key: "beneficiario", label: "Beneficiário (nome)" },
+  { key: "beneficiarioCpf", label: "CPF do beneficiário" },
+  { key: "tipoRendimento", label: "Tipo de rendimento", options: ["Salário", "Pró-labore", "Dividendos/Lucros", "Aluguel", "Aplicação financeira", "Aposentadoria/Pensão", "Outros"] },
+  { key: "rendimentosTributaveis", label: "Rendimentos tributáveis" },
+  { key: "rendimentosIsentos", label: "Rendimentos isentos / não tributáveis" },
+  { key: "rendimentosExclusivos", label: "Tributação exclusiva/definitiva" },
+  { key: "impostoRetido", label: "Imposto de renda retido na fonte" },
+];
+
 export const CATEGORY_FIELDS: Record<string, DocField[]> = {
   vehicle: [
     { key: "tipoDocumento", label: "Tipo de documento", options: ["CRLV", "CRV", "Laudo cautelar", "Nota fiscal"] },
@@ -208,20 +225,7 @@ export const CATEGORY_FIELDS: Record<string, DocField[]> = {
     { key: "pagador", label: "Quem paga" },
     { key: "lance", label: "Lance" },
   ],
-  informe_rendimento: [
-    { key: "anoBase", label: "Ano-base / exercício" },
-    { key: "fontePagadora", label: "Fonte pagadora (nome)" },
-    { key: "fontePagadoraTipoPessoa", label: "Fonte pagadora: tipo de pessoa", options: ["Pessoa jurídica", "Pessoa física"] },
-    { key: "cnpjFonte", label: "CNPJ da fonte pagadora", showWhen: [{ field: "fontePagadoraTipoPessoa", value: "Pessoa jurídica" }] },
-    { key: "cpfFonte", label: "CPF da fonte pagadora", showWhen: [{ field: "fontePagadoraTipoPessoa", value: "Pessoa física" }] },
-    { key: "beneficiario", label: "Beneficiário (nome)" },
-    { key: "cpfBeneficiario", label: "CPF do beneficiário" },
-    { key: "tipoRendimento", label: "Tipo de rendimento", options: ["Salário", "Pró-labore", "Dividendos/Lucros", "Aluguel", "Aplicação financeira", "Aposentadoria/Pensão", "Outros"] },
-    { key: "rendimentosTributaveis", label: "Rendimentos tributáveis" },
-    { key: "rendimentosIsentos", label: "Rendimentos isentos / não tributáveis" },
-    { key: "rendimentosExclusivos", label: "Tributação exclusiva/definitiva" },
-    { key: "impostoRetido", label: "Imposto de renda retido na fonte" },
-  ],
+  informe_rendimento: informeRendimentoFields,
   certificate: [
     { key: "numero", label: "Número" },
     { key: "dataEmissao", label: "Data de emissão" },
@@ -230,10 +234,16 @@ export const CATEGORY_FIELDS: Record<string, DocField[]> = {
     { key: "numeroProcesso", label: "Número do processo" },
   ],
   finance: [
+    { key: "subcategoria", label: "Subcategoria", options: ["Informe de Rendimento", "Extrato bancário", "Aplicação/Investimento", "Comprovante de transferência", "Empréstimo/Financiamento", "Outro"] },
     { key: "instituicao", label: "Instituição" },
-    { key: "tipo", label: "Tipo" },
-    { key: "valor", label: "Valor" },
-    { key: "data", label: "Data" },
+    { key: "tipo", label: "Tipo", showWhen: [{ field: "subcategoria", valueNot: "Informe de Rendimento" }] },
+    { key: "valor", label: "Valor", showWhen: [{ field: "subcategoria", valueNot: "Informe de Rendimento" }] },
+    { key: "data", label: "Data", showWhen: [{ field: "subcategoria", valueNot: "Informe de Rendimento" }] },
+    // When the subcategory is "Informe de Rendimento", reveal the income-report fields.
+    ...informeRendimentoFields.map((f) => ({
+      ...f,
+      showWhen: [{ field: "subcategoria", value: "Informe de Rendimento" }, ...(f.showWhen ?? [])],
+    })),
   ],
   studies: [
     { key: "instituicao", label: "Instituição" },

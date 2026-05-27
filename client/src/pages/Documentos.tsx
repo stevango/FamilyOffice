@@ -160,7 +160,7 @@ function maskValue(key: string, value: string): string {
   if (k.endsWith("cpf")) return maskCpf(value);
   if (k.includes("telefone") || k.includes("celular") || k.includes("fone")) return maskPhone(value);
   if (k.includes("data") || k === "validade" || k === "vigencia" || k === "primeirahabilitacao") return maskDate(value);
-  if (k.includes("valor") || k === "lance" || k === "premio") return maskMoney(value);
+  if (k.includes("valor") || k === "lance" || k === "premio" || k.startsWith("rendimentos") || k === "impostoretido") return maskMoney(value);
   return value;
 }
 

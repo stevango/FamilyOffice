@@ -42,6 +42,7 @@ const categoryColors: Record<string, string> = {
   ir: "bg-rose-500/10 text-rose-400",
   tax: "bg-orange-500/10 text-orange-400",
   informe_rendimento: "bg-lime-500/10 text-lime-400",
+  finance: "bg-green-500/10 text-green-400",
   vehicle: "bg-amber-500/10 text-amber-400",
   property: "bg-emerald-500/10 text-emerald-400",
   company: "bg-purple-500/10 text-purple-400",
@@ -70,7 +71,9 @@ function flaggedForAccountant(doc: Doc): boolean {
 }
 
 function isFiscal(doc: Doc): boolean {
-  return flaggedForAccountant(doc) || FISCAL_CATEGORIES.has(doc.category);
+  if (flaggedForAccountant(doc) || FISCAL_CATEGORIES.has(doc.category)) return true;
+  // Finance documents whose subcategory is the income report are fiscal too.
+  return doc.category === "finance" && parseMeta(doc).subcategoria === "Informe de Rendimento";
 }
 
 function year4(s?: string): string | null {
@@ -106,7 +109,7 @@ function titular(doc: Doc): string {
     doc.ownerName ||
     "";
   const id =
-    m.cpfBeneficiario ||
+    m.beneficiarioCpf ||
     m.proprietarioCpf ||
     m.proprietarioCnpj ||
     m.cpf ||
@@ -312,6 +315,9 @@ export default function Contador() {
               <div className="divide-y divide-border">
                 {docs.map((doc) => {
                   const value = relevantValue(doc);
+                  const sub = parseMeta(doc).subcategoria;
+                  const label =
+                    doc.category === "finance" && sub ? sub : CATEGORY_LABELS[doc.category] ?? doc.category;
                   return (
                     <div
                       key={doc.id}
@@ -323,7 +329,7 @@ export default function Contador() {
                             variant="outline"
                             className={`text-[10px] px-1.5 py-0 border-transparent ${categoryColors[doc.category] ?? "bg-gray-500/10 text-gray-400"}`}
                           >
-                            {CATEGORY_LABELS[doc.category] ?? doc.category}
+                            {label}
                           </Badge>
                           <p className="text-sm font-medium truncate">{doc.title}</p>
                         </div>

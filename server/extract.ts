@@ -177,8 +177,8 @@ export function extractFields(text: string, category: string): Record<string, st
       set("valorParcela", detectValor(t));
       break;
     case "informe_rendimento":
-      set("cnpjFonte", detectCnpj(t));
-      set("cpfBeneficiario", detectCpf(t));
+      set("fonteCnpj", detectCnpj(t));
+      set("beneficiarioCpf", detectCpf(t));
       set("anoBase", detectYear(t));
       break;
     case "certificate":
