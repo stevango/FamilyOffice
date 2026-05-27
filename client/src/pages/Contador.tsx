@@ -39,6 +39,8 @@ import {
   ShieldCheck,
   ShieldAlert,
   Wrench,
+  Check,
+  Undo2,
 } from "lucide-react";
 
 type Doc = {
@@ -52,6 +54,24 @@ type Doc = {
   ownerName?: string | null;
   ownerEmail?: string | null;
 };
+
+// Findings the user has reviewed/accepted (e.g. genuinely distinct entities)
+// are remembered locally so they stop cluttering the pending list.
+const REVIEWED_KEY = "fo:auditReviewed";
+function loadReviewed(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(REVIEWED_KEY) || "[]") as string[]);
+  } catch {
+    return new Set();
+  }
+}
+function saveReviewed(s: Set<string>) {
+  try {
+    localStorage.setItem(REVIEWED_KEY, JSON.stringify(Array.from(s)));
+  } catch {
+    /* ignore */
+  }
+}
 
 const categoryColors: Record<string, string> = {
   ir: "bg-rose-500/10 text-rose-400",
@@ -406,6 +426,23 @@ export default function Contador() {
   const [editTitle, setEditTitle] = useState("");
   const [editCategory, setEditCategory] = useState("other");
   const [editMeta, setEditMeta] = useState<Record<string, string>>({});
+  const [reviewed, setReviewed] = useState<Set<string>>(() => loadReviewed());
+  const [showReviewed, setShowReviewed] = useState(false);
+
+  const markReviewed = (id: string) =>
+    setReviewed((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      saveReviewed(next);
+      return next;
+    });
+  const reopenFinding = (id: string) =>
+    setReviewed((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      saveReviewed(next);
+      return next;
+    });
 
   const openEdit = (doc: Doc) => {
     setEditTitle(doc.title ?? "");
@@ -439,6 +476,8 @@ export default function Contador() {
   );
 
   const findings = useMemo(() => auditFiscalDocs(fiscalDocs), [fiscalDocs]);
+  const activeFindings = useMemo(() => findings.filter((f) => !reviewed.has(f.id)), [findings, reviewed]);
+  const reviewedFindings = useMemo(() => findings.filter((f) => reviewed.has(f.id)), [findings, reviewed]);
 
   // Link options for multi-select fields, derived from all documents.
   const linkOptions = useMemo(() => {
@@ -543,6 +582,60 @@ export default function Contador() {
 
   const flaggedCount = fiscalDocs.filter(flaggedForAccountant).length;
 
+  const renderFinding = (f: AuditFinding, isReviewed: boolean) => (
+    <div key={f.id} className={`px-4 py-3 ${isReviewed ? "opacity-60" : ""}`}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${f.level === "error" ? "text-red-400" : "text-amber-400"}`} />
+          <span className={`text-sm font-medium truncate ${f.level === "error" ? "text-red-400" : "text-amber-300"}`}>
+            {f.title}
+          </span>
+        </div>
+        {isReviewed ? (
+          <button
+            type="button"
+            onClick={() => reopenFinding(f.id)}
+            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground shrink-0"
+            title="Reabrir esta inconsistência"
+          >
+            <Undo2 className="h-3 w-3" /> Reabrir
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => markReviewed(f.id)}
+            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-emerald-400 shrink-0"
+            title="Marcar como revisado (remove da lista de pendências)"
+          >
+            <Check className="h-3 w-3" /> Marcar como revisado
+          </button>
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground mt-1">{f.detail}</p>
+      <div className="flex items-start gap-1.5 mt-2 rounded-md bg-secondary/50 px-2 py-1.5">
+        <Wrench className="h-3 w-3 mt-0.5 shrink-0 text-primary" />
+        <p className="text-[11px] text-foreground/80">
+          <span className="font-medium text-foreground">Como corrigir: </span>
+          {f.fix}
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-1.5 mt-2">
+        {f.docs.map((d) => (
+          <button
+            key={d.id}
+            type="button"
+            onClick={() => openEdit(d)}
+            className="inline-flex items-center gap-1 text-[11px] rounded bg-secondary/70 hover:bg-secondary px-2 py-0.5 text-foreground/90 max-w-[260px]"
+            title={`Corrigir: ${d.title}`}
+          >
+            <Wrench className="h-2.5 w-2.5 shrink-0 text-primary" />
+            <span className="truncate">{d.title}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       <div>
@@ -577,60 +670,46 @@ export default function Contador() {
       </div>
 
       {/* Auditoria — inconsistências a corrigir antes de enviar */}
-      {fiscalDocs.length > 0 &&
-        (findings.length === 0 ? (
-          <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm text-emerald-400">
-            <ShieldCheck className="h-4 w-4 shrink-0" />
-            Auditoria: nenhuma inconsistência encontrada nos dados fiscais.
-          </div>
-        ) : (
-          <div className="rounded-lg border border-amber-500/40 overflow-hidden">
-            <div className="flex items-center gap-2 px-4 py-3 bg-amber-500/10 border-b border-amber-500/30">
-              <ShieldAlert className="h-4 w-4 text-amber-400" />
-              <h2 className="text-sm font-semibold text-amber-300">
-                Auditoria — {findings.length} {findings.length === 1 ? "inconsistência" : "inconsistências"} a revisar
-              </h2>
+      {fiscalDocs.length > 0 && (
+        <div className="space-y-3">
+          {activeFindings.length === 0 ? (
+            <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm text-emerald-400">
+              <ShieldCheck className="h-4 w-4 shrink-0" />
+              Auditoria: nenhuma inconsistência pendente nos dados fiscais.
             </div>
-            <div className="divide-y divide-border">
-              {findings.map((f) => (
-                <div key={f.id} className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    {f.level === "error" ? (
-                      <AlertTriangle className="h-3.5 w-3.5 text-red-400 shrink-0" />
-                    ) : (
-                      <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-                    )}
-                    <span className={`text-sm font-medium ${f.level === "error" ? "text-red-400" : "text-amber-300"}`}>
-                      {f.title}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">{f.detail}</p>
-                  <div className="flex items-start gap-1.5 mt-2 rounded-md bg-secondary/50 px-2 py-1.5">
-                    <Wrench className="h-3 w-3 mt-0.5 shrink-0 text-primary" />
-                    <p className="text-[11px] text-foreground/80">
-                      <span className="font-medium text-foreground">Como corrigir: </span>
-                      {f.fix}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {f.docs.map((d) => (
-                      <button
-                        key={d.id}
-                        type="button"
-                        onClick={() => openEdit(d)}
-                        className="inline-flex items-center gap-1 text-[11px] rounded bg-secondary/70 hover:bg-secondary px-2 py-0.5 text-foreground/90 max-w-[260px]"
-                        title={`Corrigir: ${d.title}`}
-                      >
-                        <Wrench className="h-2.5 w-2.5 shrink-0 text-primary" />
-                        <span className="truncate">{d.title}</span>
-                      </button>
-                    ))}
-                  </div>
+          ) : (
+            <div className="rounded-lg border border-amber-500/40 overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-3 bg-amber-500/10 border-b border-amber-500/30">
+                <ShieldAlert className="h-4 w-4 text-amber-400" />
+                <h2 className="text-sm font-semibold text-amber-300">
+                  Auditoria — {activeFindings.length} {activeFindings.length === 1 ? "inconsistência" : "inconsistências"} a revisar
+                </h2>
+              </div>
+              <div className="divide-y divide-border">
+                {activeFindings.map((f) => renderFinding(f, false))}
+              </div>
+            </div>
+          )}
+
+          {reviewedFindings.length > 0 && (
+            <div className="rounded-lg border border-border/60 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowReviewed((v) => !v)}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-xs text-muted-foreground hover:bg-accent/30"
+              >
+                <Check className="h-3.5 w-3.5 text-emerald-400" />
+                {reviewedFindings.length} revisada(s) — {showReviewed ? "ocultar" : "mostrar"}
+              </button>
+              {showReviewed && (
+                <div className="divide-y divide-border border-t border-border/60">
+                  {reviewedFindings.map((f) => renderFinding(f, true))}
                 </div>
-              ))}
+              )}
             </div>
-          </div>
-        ))}
+          )}
+        </div>
+      )}
 
       {/* Filters: exercício × tipo (PF/PJ) × titular */}
       {fiscalDocs.length > 0 && (
