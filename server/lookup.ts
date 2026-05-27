@@ -16,16 +16,17 @@ export async function fetchLookupJson(
   messages: { notFound: string; unavailable: string },
 ): Promise<any> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10_000);
+  const timer = setTimeout(() => controller.abort(), 12_000);
   try {
     const res = await fetch(url, { signal: controller.signal, headers: { Accept: "application/json" } });
     if (res.status === 404) throw new ExternalLookupError(messages.notFound, true);
-    if (!res.ok) throw new ExternalLookupError(messages.unavailable);
+    if (!res.ok) throw new ExternalLookupError(`${messages.unavailable} (HTTP ${res.status})`);
     return await res.json();
   } catch (err) {
     if (err instanceof ExternalLookupError) throw err;
-    // Network blocked/timeout/etc. — keep the message actionable.
-    throw new ExternalLookupError(messages.unavailable);
+    // Network blocked/timeout/etc. — keep the message actionable and add a hint.
+    const reason = (err as { name?: string })?.name === "AbortError" ? "tempo esgotado" : "sem conexão";
+    throw new ExternalLookupError(`${messages.unavailable} [${reason}]`);
   } finally {
     clearTimeout(timer);
   }
