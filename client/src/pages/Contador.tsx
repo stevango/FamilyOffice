@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { onlyDigits } from "@/lib/currency";
 import { CATEGORY_LABELS } from "@shared/documentFields";
 import {
   Calculator,
@@ -97,26 +98,63 @@ function fiscalYear(doc: Doc): string {
   );
 }
 
-/** Best-effort taxpayer (nome + CPF/CNPJ) for the document. */
-function titular(doc: Doc): string {
+/** Best-effort taxpayer name for the document. */
+function titularName(doc: Doc): string {
   const m = parseMeta(doc);
-  const name =
+  return (
     m.beneficiario ||
     m.proprietario ||
     m.consorciado ||
     m.contratanteNome ||
     m.razaoSocial ||
     doc.ownerName ||
-    "";
-  const id =
+    ""
+  );
+}
+
+/** Best-effort taxpayer document number (CPF/CNPJ) for the document. */
+function titularDoc(doc: Doc): string {
+  const m = parseMeta(doc);
+  return (
     m.beneficiarioCpf ||
     m.proprietarioCpf ||
     m.proprietarioCnpj ||
     m.cpf ||
     m.cnpj ||
     m.cpfCnpj ||
+    ""
+  );
+}
+
+/** Whether the taxpayer is a person (PF) or company (PJ) — by document length
+ *  when known, else by the "tipo de pessoa" field. */
+function titularType(doc: Doc): "PF" | "PJ" | null {
+  const digits = onlyDigits(titularDoc(doc));
+  if (digits.length === 14) return "PJ";
+  if (digits.length === 11) return "PF";
+  const m = parseMeta(doc);
+  const tp =
+    m.proprietarioTipoPessoa ||
+    m.fontePagadoraTipoPessoa ||
+    m.tipoPessoa ||
+    m.contratanteTipoPessoa ||
     "";
-  return [name, id].filter(Boolean).join(" · ") || "Sem titular informado";
+  if (tp === "Pessoa jurídica") return "PJ";
+  if (tp === "Pessoa física") return "PF";
+  return null;
+}
+
+/** Stable key grouping documents by taxpayer (document digits, else name). */
+function titularKey(doc: Doc): string {
+  const digits = onlyDigits(titularDoc(doc));
+  if (digits) return digits;
+  const name = titularName(doc).trim().toLowerCase();
+  return name || "__sem_titular__";
+}
+
+/** Combined "nome · CPF/CNPJ" label for display. */
+function titular(doc: Doc): string {
+  return [titularName(doc), titularDoc(doc)].filter(Boolean).join(" · ") || "Sem titular informado";
 }
 
 /** For a vehicle document, whether it represents a purchase or a sale. */
@@ -159,6 +197,8 @@ export default function Contador() {
   const { data: accessLog } = trpc.documents.shareAccessLog.useQuery();
   const shareLinkMutation = trpc.documents.shareLink.useMutation();
   const [year, setYear] = useState<string>("all");
+  const [tipo, setTipo] = useState<string>("all"); // all | PF | PJ
+  const [holder, setHolder] = useState<string>("all"); // all | titularKey
   const [bundling, setBundling] = useState<string | null>(null);
 
   const fiscalDocs = useMemo(
@@ -171,10 +211,37 @@ export default function Contador() {
     return Array.from(set).sort((a, b) => Number(b) - Number(a));
   }, [fiscalDocs]);
 
-  const shown = useMemo(
-    () => (year === "all" ? fiscalDocs : fiscalDocs.filter((d) => fiscalYear(d) === year)),
-    [fiscalDocs, year],
+  // Distinct taxpayers found in the fiscal documents (for the holder filter).
+  const holders = useMemo(() => {
+    const map = new Map<string, { key: string; name: string; doc: string; tipo: "PF" | "PJ" | null }>();
+    for (const d of fiscalDocs) {
+      const key = titularKey(d);
+      if (!map.has(key)) {
+        map.set(key, { key, name: titularName(d) || "Sem titular", doc: titularDoc(d), tipo: titularType(d) });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [fiscalDocs]);
+
+  // Holder options, narrowed by the PF/PJ filter when active.
+  const holderOptions = useMemo(
+    () => (tipo === "all" ? holders : holders.filter((h) => h.tipo === tipo)),
+    [holders, tipo],
   );
+
+  const shown = useMemo(
+    () =>
+      fiscalDocs.filter(
+        (d) =>
+          (year === "all" || fiscalYear(d) === year) &&
+          (tipo === "all" || titularType(d) === tipo) &&
+          (holder === "all" || titularKey(d) === holder),
+      ),
+    [fiscalDocs, year, tipo, holder],
+  );
+
+  const selectedHolderName =
+    holder === "all" ? null : holders.find((h) => h.key === holder)?.name ?? null;
 
   // Group by exercício (desc).
   const groups = useMemo(() => {
@@ -206,8 +273,9 @@ export default function Contador() {
         const { token } = await shareLinkMutation.mutateAsync({ id: d.id });
         lines.push(`${d.title}: ${window.location.origin}/api/share/${token}`);
       }
+      const who = selectedHolderName ? ` — ${selectedHolderName}` : "";
       await navigator.clipboard.writeText(
-        `Documentos para o contador — exercício ${yr} (links válidos por 7 dias):\n\n${lines.join("\n")}`,
+        `Documentos para o contador${who} — exercício ${yr} (links válidos por 7 dias):\n\n${lines.join("\n")}`,
       );
       toast.success(`${docs.length} link(s) do exercício ${yr} copiados`);
     } catch (err: any) {
@@ -252,11 +320,11 @@ export default function Contador() {
         </div>
       </div>
 
-      {/* Filter */}
-      {years.length > 0 && (
-        <div className="flex items-center gap-3">
+      {/* Filters: exercício × tipo (PF/PJ) × titular */}
+      {fiscalDocs.length > 0 && (
+        <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3">
           <Select value={year} onValueChange={setYear}>
-            <SelectTrigger className="w-48">
+            <SelectTrigger className="w-full sm:w-44">
               <SelectValue placeholder="Exercício" />
             </SelectTrigger>
             <SelectContent>
@@ -264,6 +332,43 @@ export default function Contador() {
               {years.map((y) => (
                 <SelectItem key={y} value={y}>
                   {y}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={tipo}
+            onValueChange={(v) => {
+              setTipo(v);
+              // Reset holder if it no longer matches the chosen type.
+              if (v !== "all" && holder !== "all") {
+                const h = holders.find((x) => x.key === holder);
+                if (!h || h.tipo !== v) setHolder("all");
+              }
+            }}
+          >
+            <SelectTrigger className="w-full sm:w-48">
+              <SelectValue placeholder="Tipo de pessoa" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">PF e PJ</SelectItem>
+              <SelectItem value="PF">Pessoa física (PF)</SelectItem>
+              <SelectItem value="PJ">Pessoa jurídica (PJ)</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={holder} onValueChange={setHolder}>
+            <SelectTrigger className="w-full sm:w-72">
+              <SelectValue placeholder="Titular" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os titulares</SelectItem>
+              {holderOptions.map((h) => (
+                <SelectItem key={h.key} value={h.key}>
+                  {h.name}
+                  {h.tipo ? ` (${h.tipo})` : ""}
+                  {h.doc ? ` · ${h.doc}` : ""}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -280,17 +385,40 @@ export default function Contador() {
       ) : groups.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border/60 p-8 text-center">
           <Calculator className="h-8 w-8 mx-auto text-muted-foreground/60" />
-          <p className="text-sm font-medium mt-3">Nenhum documento fiscal ainda</p>
-          <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
-            Documentos aparecem aqui quando são da categoria fiscal (Imposto de Renda,
-            Fiscal, Informe de rendimento) ou quando marcados como{" "}
-            <span className="text-amber-400">“Comunicar ao contador (IR)”</span> na análise da IA.
-          </p>
-          <Link href="/documentos">
-            <Button variant="outline" size="sm" className="mt-4 gap-2">
-              <FileText className="h-4 w-4" /> Ir para o Cofre Digital
-            </Button>
-          </Link>
+          {fiscalDocs.length > 0 ? (
+            <>
+              <p className="text-sm font-medium mt-3">Nenhum documento para este filtro</p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
+                Ajuste o exercício, o tipo de pessoa ou o titular selecionados.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-4"
+                onClick={() => {
+                  setYear("all");
+                  setTipo("all");
+                  setHolder("all");
+                }}
+              >
+                Limpar filtros
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-medium mt-3">Nenhum documento fiscal ainda</p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
+                Documentos aparecem aqui quando são da categoria fiscal (Imposto de Renda,
+                Fiscal, Informe de rendimento) ou quando marcados como{" "}
+                <span className="text-amber-400">“Comunicar ao contador (IR)”</span> na análise da IA.
+              </p>
+              <Link href="/documentos">
+                <Button variant="outline" size="sm" className="mt-4 gap-2">
+                  <FileText className="h-4 w-4" /> Ir para o Cofre Digital
+                </Button>
+              </Link>
+            </>
+          )}
         </div>
       ) : (
         <div className="space-y-6">
