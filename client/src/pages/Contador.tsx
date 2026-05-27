@@ -4,6 +4,14 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -13,6 +21,8 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { onlyDigits } from "@/lib/currency";
+import { maskValue } from "@/lib/docmask";
+import { MetaFieldsBlock } from "@/components/MetaFieldsBlock";
 import { CATEGORY_LABELS } from "@shared/documentFields";
 import {
   Calculator,
@@ -376,13 +386,52 @@ function formatDateTime(date: string | Date) {
 }
 
 export default function Contador() {
+  const utils = trpc.useUtils();
   const { data: documents, isLoading } = trpc.documents.list.useQuery();
   const { data: accessLog } = trpc.documents.shareAccessLog.useQuery();
   const shareLinkMutation = trpc.documents.shareLink.useMutation();
+  const updateMutation = trpc.documents.update.useMutation({
+    onSuccess: () => {
+      utils.documents.list.invalidate();
+      toast.success("Documento atualizado");
+      setEditing(null);
+    },
+    onError: (err) => toast.error(err.message ?? "Falha ao salvar"),
+  });
   const [year, setYear] = useState<string>("all");
   const [tipo, setTipo] = useState<string>("all"); // all | PF | PJ
   const [holder, setHolder] = useState<string>("all"); // all | titularKey
   const [bundling, setBundling] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Doc | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editCategory, setEditCategory] = useState("other");
+  const [editMeta, setEditMeta] = useState<Record<string, string>>({});
+
+  const openEdit = (doc: Doc) => {
+    setEditTitle(doc.title ?? "");
+    setEditCategory(doc.category ?? "other");
+    let m: Record<string, string> = {};
+    try { if (doc.metadata) m = JSON.parse(doc.metadata) as Record<string, string>; } catch { /* ignore */ }
+    setEditMeta(m);
+    setEditing(doc);
+  };
+
+  const saveEdit = () => {
+    if (!editing) return;
+    if (!editTitle.trim()) {
+      toast.error("Preencha o título");
+      return;
+    }
+    const metadata = Object.fromEntries(
+      Object.entries(editMeta).filter(([, v]) => v && v.trim()).map(([k, v]) => [k, maskValue(k, v)]),
+    );
+    updateMutation.mutate({
+      id: editing.id,
+      title: editTitle,
+      category: editCategory as any,
+      metadata,
+    });
+  };
 
   const fiscalDocs = useMemo(
     () => ((documents as Doc[] | undefined) ?? []).filter(isFiscal),
@@ -390,6 +439,28 @@ export default function Contador() {
   );
 
   const findings = useMemo(() => auditFiscalDocs(fiscalDocs), [fiscalDocs]);
+
+  // Link options for multi-select fields, derived from all documents.
+  const linkOptions = useMemo(() => {
+    const all = (documents as Doc[] | undefined) ?? [];
+    const consorcio = all
+      .filter((d) => d.category === "consorcio")
+      .map((d) => {
+        const m = parseMeta(d);
+        const parts = [m.administradora || d.title];
+        if (m.numeroContrato) parts.push(`Nº ${m.numeroContrato}`);
+        if (m.grupo) parts.push(`G${m.grupo}`);
+        return { id: d.id, label: parts.filter(Boolean).join(" · "), tipo: m.tipo || "" };
+      });
+    const vehicle = all
+      .filter((d) => d.category === "vehicle")
+      .map((d) => {
+        const m = parseMeta(d);
+        const parts = [m.placa, m.marcaModelo].filter(Boolean);
+        return { id: d.id, label: parts.length ? parts.join(" · ") : d.title, tipo: "" };
+      });
+    return { consorcio, vehicle };
+  }, [documents]);
 
   const years = useMemo(() => {
     const set = new Set(fiscalDocs.map(fiscalYear));
@@ -543,16 +614,16 @@ export default function Contador() {
                   </div>
                   <div className="flex flex-wrap gap-1.5 mt-2">
                     {f.docs.map((d) => (
-                      <Link key={d.id} href={`/documentos?edit=${d.id}`}>
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-1 text-[11px] rounded bg-secondary/70 hover:bg-secondary px-2 py-0.5 text-foreground/90 max-w-[260px]"
-                          title={`Corrigir: ${d.title}`}
-                        >
-                          <Wrench className="h-2.5 w-2.5 shrink-0 text-primary" />
-                          <span className="truncate">{d.title}</span>
-                        </button>
-                      </Link>
+                      <button
+                        key={d.id}
+                        type="button"
+                        onClick={() => openEdit(d)}
+                        className="inline-flex items-center gap-1 text-[11px] rounded bg-secondary/70 hover:bg-secondary px-2 py-0.5 text-foreground/90 max-w-[260px]"
+                        title={`Corrigir: ${d.title}`}
+                      >
+                        <Wrench className="h-2.5 w-2.5 shrink-0 text-primary" />
+                        <span className="truncate">{d.title}</span>
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -802,6 +873,50 @@ export default function Contador() {
           por convite e login próprio) está no roadmap.
         </span>
       </div>
+
+      <Dialog open={editing != null} onOpenChange={(v) => { if (!v) setEditing(null); }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Corrigir documento</DialogTitle>
+          </DialogHeader>
+          {editing && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Título</Label>
+                  <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="h-9" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Categoria</Label>
+                  <Select value={editCategory} onValueChange={setEditCategory}>
+                    <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(CATEGORY_LABELS).map(([key, lbl]) => (
+                        <SelectItem key={key} value={key}>{lbl}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <MetaFieldsBlock
+                category={editCategory}
+                meta={editMeta}
+                setMeta={setEditMeta}
+                linkOptions={{
+                  consorcio: linkOptions.consorcio.filter((o) => o.id !== editing.id),
+                  vehicle: linkOptions.vehicle.filter((o) => o.id !== editing.id),
+                }}
+              />
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setEditing(null)}>Cancelar</Button>
+                <Button onClick={saveEdit} disabled={updateMutation.isPending}>
+                  {updateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

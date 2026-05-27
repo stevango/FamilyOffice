@@ -56,7 +56,9 @@ import {
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { downloadCsv } from "@/lib/export";
-import { onlyDigits, parseBRLNum, formatBRL, maskMoney } from "@/lib/currency";
+import { parseBRLNum, formatBRL, maskMoney } from "@/lib/currency";
+import { maskValue, computeEncerramento } from "@/lib/docmask";
+import { MetaFieldsBlock } from "@/components/MetaFieldsBlock";
 import { fieldsForCategory } from "@shared/documentFields";
 
 const categoryLabels: Record<string, string> = {
@@ -133,47 +135,6 @@ function parseMetadata(doc: { metadata?: string | null; category: string }): { l
   }
 }
 
-// ---- Input masks (CPF/CNPJ, telefone, data) ----
-function maskCpf(v: string): string {
-  const d = onlyDigits(v).slice(0, 11);
-  if (d.length > 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
-  if (d.length > 6) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
-  if (d.length > 3) return `${d.slice(0, 3)}.${d.slice(3)}`;
-  return d;
-}
-function maskCnpj(v: string): string {
-  const d = onlyDigits(v).slice(0, 14);
-  if (d.length > 12) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
-  if (d.length > 8) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8)}`;
-  if (d.length > 5) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5)}`;
-  if (d.length > 2) return `${d.slice(0, 2)}.${d.slice(2)}`;
-  return d;
-}
-function maskPhone(v: string): string {
-  const d = onlyDigits(v).slice(0, 11);
-  if (d.length <= 2) return d;
-  if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
-  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
-  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
-}
-function maskDate(v: string): string {
-  const d = onlyDigits(v).slice(0, 8);
-  if (d.length <= 2) return d;
-  if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`;
-  return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
-}
-/** Apply the right mask to a field's value, inferred from its key. */
-function maskValue(key: string, value: string): string {
-  const k = key.toLowerCase();
-  if (k === "cpfcnpj") return onlyDigits(value).length > 11 ? maskCnpj(value) : maskCpf(value);
-  if (k.endsWith("cnpj")) return maskCnpj(value);
-  if (k.endsWith("cpf")) return maskCpf(value);
-  if (k.includes("telefone") || k.includes("celular") || k.includes("fone")) return maskPhone(value);
-  if (k.includes("data") || k === "validade" || k === "vigencia" || k === "primeirahabilitacao") return maskDate(value);
-  if (k.includes("valor") || k === "lance" || k === "premio" || k.startsWith("rendimentos") || k === "impostoretido") return maskMoney(value);
-  return value;
-}
-
 /** Vehicle possession status for the badge ("Em posse" / "Vendido"), or null
  *  when not a vehicle, not set, or explicitly hidden ("Não informar"). */
 function vehicleStatus(doc: { category: string; metadata?: string | null }): "Em posse" | "Vendido" | null {
@@ -192,22 +153,6 @@ function needsAccountant(doc: { aiSummary?: string | null }): boolean {
   try { return JSON.parse(doc.aiSummary)?.comunicarContador === true; } catch { return false; }
 }
 
-/** Estimated end date = adesão + N installments (months), as dd/mm/aaaa.
- *  Accepts dd/mm/aaaa, dd-mm-aaaa or aaaa-mm-dd for the start date. */
-function computeEncerramento(dataAdesao?: string, parcelas?: string): string | null {
-  const s = (dataAdesao ?? "").trim();
-  let y: number | undefined, mo: number | undefined, d: number | undefined;
-  let m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
-  if (m) { d = +m[1]; mo = +m[2]; y = +m[3]; }
-  else { m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/); if (m) { y = +m[1]; mo = +m[2]; d = +m[3]; } }
-  const n = parseInt((parcelas ?? "").replace(/\D/g, ""), 10);
-  if (y == null || mo == null || d == null || !n) return null;
-  const dt = new Date(Date.UTC(y, mo - 1 + n, d));
-  if (Number.isNaN(dt.getTime())) return null;
-  const pad = (x: number) => String(x).padStart(2, "0");
-  return `${pad(dt.getUTCDate())}/${pad(dt.getUTCMonth() + 1)}/${dt.getUTCFullYear()}`;
-}
-
 /** For a consórcio doc, a "paid X/Y (NN%)" progress string, when known. */
 function consorcioProgress(doc: { category: string; metadata?: string | null }): { label: string; pct: number } | null {
   if (doc.category !== "consorcio" || !doc.metadata) return null;
@@ -221,133 +166,6 @@ function consorcioProgress(doc: { category: string; metadata?: string | null }):
   } catch {
     return null;
   }
-}
-
-/** Editable per-category fields, shared by the create and edit dialogs. */
-function MetaFieldsBlock({
-  category, meta, setMeta, analyzing, onLookupCnpj, onLookupCep, lookupPending, onAiFill, aiPending, aiAvailable, linkOptions,
-}: {
-  category: string;
-  meta: Record<string, string>;
-  setMeta: (updater: (prev: Record<string, string>) => Record<string, string>) => void;
-  analyzing?: boolean;
-  onLookupCnpj: () => void;
-  onLookupCep: () => void;
-  lookupPending: boolean;
-  onAiFill?: () => void;
-  aiPending?: boolean;
-  aiAvailable?: boolean;
-  linkOptions?: Record<string, Array<{ id: number; label: string; tipo: string }>>;
-}) {
-  const [linkSearch, setLinkSearch] = useState("");
-  const fields = fieldsForCategory(category).filter(
-    (f) => !f.showWhen || f.showWhen.every((c) => {
-      const v = meta[c.field];
-      if (c.valueNot !== undefined) return Array.isArray(c.valueNot) ? !c.valueNot.includes(v) : v !== c.valueNot;
-      return Array.isArray(c.value) ? c.value.includes(v) : v === c.value;
-    }),
-  );
-  if (fieldsForCategory(category).length === 0) return null;
-  return (
-    <div className="space-y-3 rounded-lg border border-border/60 p-4">
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        {analyzing ? (
-          <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Analisando documento...</>
-        ) : (
-          <><Sparkles className="h-3.5 w-3.5 text-primary" /> Dados do documento (preenchidos automaticamente quando possível)</>
-        )}
-      </div>
-      {aiAvailable && onAiFill && (
-        <Button type="button" variant="outline" size="sm" className="gap-2" onClick={onAiFill} disabled={aiPending}>
-          {aiPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bot className="h-3.5 w-3.5 text-primary" />}
-          IA: ler documento e preencher campos
-        </Button>
-      )}
-      {category === "company" && (
-        <Button type="button" variant="outline" size="sm" className="gap-2" onClick={onLookupCnpj} disabled={lookupPending}>
-          {lookupPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
-          Consultar CNPJ na Receita
-        </Button>
-      )}
-      {category === "property" && (
-        <Button type="button" variant="outline" size="sm" className="gap-2" onClick={onLookupCep} disabled={lookupPending}>
-          {lookupPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
-          Buscar endereço por CEP
-        </Button>
-      )}
-      <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-        {fields.map((f) => (
-          <div key={f.key} className={f.multi ? "space-y-1.5 col-span-2" : "space-y-1.5"}>
-            <Label className="text-xs text-muted-foreground">{f.label}</Label>
-            {f.multi ? (
-              (() => {
-                const all = (linkOptions?.[f.multi] ?? []).filter((o) => !f.multiTipos || f.multiTipos.includes(o.tipo));
-                const opts = linkSearch.trim() ? all.filter((o) => o.label.toLowerCase().includes(linkSearch.trim().toLowerCase())) : all;
-                return all.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">{f.multi === "vehicle" ? "Nenhum veículo cadastrado." : "Nenhuma carta de consórcio do tipo correspondente cadastrada."}</p>
-                ) : (
-                <div className="space-y-1.5">
-                  <Input value={linkSearch} onChange={(e) => setLinkSearch(e.target.value)} placeholder="Buscar..." className="h-8" />
-                  <div className="flex flex-wrap gap-1.5">
-                  {opts.map((opt) => {
-                    const active = (meta[f.key] ?? "").split(",").filter(Boolean).includes(String(opt.id));
-                    return (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() => setMeta((prev) => {
-                          const cur = (prev[f.key] ?? "").split(",").filter(Boolean);
-                          const next = active ? cur.filter((x) => x !== String(opt.id)) : [...cur, String(opt.id)];
-                          return { ...prev, [f.key]: next.join(",") };
-                        })}
-                        className={`text-[11px] rounded-full border px-2 py-1 transition-colors ${active ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-accent/40"}`}
-                      >
-                        {active ? "✓ " : ""}{opt.label}
-                      </button>
-                    );
-                  })}
-                  </div>
-                </div>
-                );
-              })()
-            ) : f.options ? (
-              <Select value={meta[f.key] ?? ""} onValueChange={(v) => setMeta((prev) => ({ ...prev, [f.key]: v }))}>
-                <SelectTrigger className="h-9"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                <SelectContent>
-                  {[...f.options, ...(meta[f.key] && !f.options.includes(meta[f.key]) ? [meta[f.key]] : [])].map((opt) => (
-                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Input
-                value={maskValue(f.key, meta[f.key] ?? "")}
-                onChange={(e) => setMeta((prev) => ({ ...prev, [f.key]: maskValue(f.key, e.target.value) }))}
-                className="h-9"
-              />
-            )}
-            {f.key === "dataEncerramento" && (
-              <button
-                type="button"
-                onClick={() => {
-                  const enc = computeEncerramento(meta.dataAdesao, meta.parcelas);
-                  if (enc) {
-                    setMeta((prev) => ({ ...prev, dataEncerramento: enc }));
-                    toast.success(`Encerramento estimado: ${enc}`);
-                  } else {
-                    toast.error("Preencha a Data de adesão (dd/mm/aaaa) e as Parcelas (total)");
-                  }
-                }}
-                className="text-[10px] text-primary hover:underline"
-              >
-                Recalcular a partir da adesão + parcelas
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 export default function Documentos() {
