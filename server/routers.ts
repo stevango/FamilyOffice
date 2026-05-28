@@ -29,6 +29,7 @@ import { decryptSecret, encryptSecret, secretHint } from "./crypto";
 import { extractFields, extractText } from "./extract";
 import { IntegrationPendingError, syncJusbrasil } from "./jusbrasil";
 import { syncDigesto, verifyDigesto } from "./digesto";
+import { syncDatajud, verifyDatajud } from "./datajud";
 import { ExternalLookupError } from "./lookup";
 import { storageDelete, storagePut, storageReadBuffer } from "./storage";
 
@@ -1182,12 +1183,14 @@ export const appRouter = router({
       if (!row?.credentials) {
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configure as credenciais primeiro." });
       }
-      if (input.provider !== "claude" && input.provider !== "openai" && input.provider !== "digesto") {
+      const p = input.provider;
+      if (p !== "digesto" && p !== "datajud" && p !== "claude" && p !== "openai") {
         throw new TRPCError({ code: "NOT_IMPLEMENTED", message: "Teste de conexão não disponível para este provedor." });
       }
       try {
-        if (input.provider === "digesto") await verifyDigesto(decryptSecret(row.credentials));
-        else await verifyAiKey(input.provider, decryptSecret(row.credentials));
+        if (p === "digesto") await verifyDigesto(decryptSecret(row.credentials));
+        else if (p === "datajud") await verifyDatajud(decryptSecret(row.credentials));
+        else await verifyAiKey(p, decryptSecret(row.credentials));
         await db.upsertIntegration(ctx.user.householdId, input.provider, { status: "connected", lastError: null, lastSyncAt: new Date() });
         return { ok: true };
       } catch (err) {
@@ -1209,7 +1212,7 @@ export const appRouter = router({
     }),
     /** Run a sync for a configured provider, importing data into its module. */
     sync: adminProcedure.input(z.object({ provider: z.enum(INTEGRATION_IDS) })).mutation(async ({ ctx, input }) => {
-      if (input.provider !== "jusbrasil" && input.provider !== "digesto") {
+      if (!["jusbrasil", "digesto", "datajud"].includes(input.provider)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Este provedor não possui sincronização." });
       }
       const row = await db.getIntegration(ctx.user.householdId, input.provider);
@@ -1218,7 +1221,7 @@ export const appRouter = router({
       }
       const apiKey = decryptSecret(row.credentials);
       try {
-        const sync = input.provider === "digesto" ? syncDigesto : syncJusbrasil;
+        const sync = input.provider === "digesto" ? syncDigesto : input.provider === "datajud" ? syncDatajud : syncJusbrasil;
         const { imported } = await sync({ apiKey, householdId: ctx.user.householdId, userId: ctx.user.id });
         await db.upsertIntegration(ctx.user.householdId, input.provider, {
           status: "connected", lastSyncAt: new Date(), lastError: null,

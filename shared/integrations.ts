@@ -1,6 +1,6 @@
 /** Catalog of partner integrations, shared by client and server. */
 
-export type IntegrationProvider = "jusbrasil" | "digesto" | "claude" | "openai";
+export type IntegrationProvider = "jusbrasil" | "digesto" | "datajud" | "claude" | "openai";
 
 export interface IntegrationMeta {
   id: IntegrationProvider;
@@ -34,6 +34,16 @@ export const INTEGRATIONS: IntegrationMeta[] = [
     feeds: "Jurídico",
     credentialLabel: "Token de API (Digesto)",
     docsUrl: "https://op.digesto.com.br/doc_api/monitoramento.html",
+    supportsSync: true,
+    supportsTest: true,
+  },
+  {
+    id: "datajud",
+    name: "DataJud (CNJ)",
+    description: "API Pública do CNJ. Enriquece os processos já cadastrados no Jurídico com classe, órgão julgador e o último andamento oficial (consulta pelo número CNJ).",
+    feeds: "Jurídico",
+    credentialLabel: "Chave pública (APIKey) do DataJud",
+    docsUrl: "https://datajud-wiki.cnj.jus.br/api-publica/acesso",
     supportsSync: true,
     supportsTest: true,
   },
