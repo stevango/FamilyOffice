@@ -350,10 +350,22 @@ export default function Juridico() {
         </div>
       ) : (
         <Card className="bg-card border-border">
-          <CardContent className="flex flex-col items-center justify-center py-16">
+          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <Scale className="h-12 w-12 text-muted-foreground/40 mb-3" />
-            <p className="text-sm text-muted-foreground">{list.length === 0 ? "Nenhum processo cadastrado" : "Nenhum processo para o filtro"}</p>
-            <p className="text-xs text-muted-foreground mt-1">{list.length === 0 ? "Registre seus processos judiciais" : "Ajuste a busca ou os filtros"}</p>
+            {(search.trim() || statusFilter !== "all" || areaFilter !== "all" || riscoFilter !== "all") ? (
+              <>
+                <p className="text-sm text-muted-foreground">Nenhum processo encontrado na busca</p>
+                <p className="text-xs text-muted-foreground mt-1 max-w-md">
+                  A busca procura apenas entre os processos <b>já cadastrados</b> aqui — ela não consulta os tribunais pelo nome.
+                  Para trazer um processo, clique em <b>Novo Processo</b>, informe o <b>número CNJ</b> e use <b>“Atualizar via DataJud”</b>.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground">Nenhum processo cadastrado</p>
+                <p className="text-xs text-muted-foreground mt-1">Registre seus processos judiciais (pelo número CNJ) e atualize pelo DataJud.</p>
+              </>
+            )}
           </CardContent>
         </Card>
       )}
