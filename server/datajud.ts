@@ -123,6 +123,18 @@ export async function verifyDatajud(apiKey: string): Promise<void> {
   await datajudSearch("tjsp", { size: 0, query: { match_all: {} } }, apiKey);
 }
 
+/** Normalize a DataJud date (ISO "2025-08-18T..." or compact "20250818120000")
+ *  to "YYYY-MM-DD", or "" when not parseable. */
+function toIsoDate(v: unknown): string {
+  if (v == null) return "";
+  const s = String(v);
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const d = s.replace(/\D/g, "");
+  if (d.length >= 8) return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
+  return "";
+}
+
 /** Look up a single process by CNJ number, returning structured fields. */
 export async function lookupProcess(numero: string, apiKey: string): Promise<Record<string, string> | null> {
   const digits = numero.replace(/\D/g, "");
@@ -133,6 +145,7 @@ export async function lookupProcess(numero: string, apiKey: string): Promise<Rec
   if (!source) return null;
   const movs: any[] = Array.isArray(source.movimentos) ? source.movimentos : [];
   const last = movs.slice().sort((a, b) => String(b?.dataHora ?? "").localeCompare(String(a?.dataHora ?? "")))[0];
+  const lastDate = last ? toIsoDate(last.dataHora) : "";
   const assuntos = Array.isArray(source.assuntos) ? source.assuntos.map((a: any) => a?.nome).filter(Boolean).join(", ") : "";
   return {
     tribunal: String(source.tribunal ?? ""),
@@ -140,8 +153,8 @@ export async function lookupProcess(numero: string, apiKey: string): Promise<Rec
     assunto: assuntos,
     grau: String(source.grau ?? ""),
     orgaoJulgador: String(source.orgaoJulgador?.nome ?? ""),
-    dataAjuizamento: source.dataAjuizamento ? String(source.dataAjuizamento).slice(0, 10) : "",
+    dataAjuizamento: toIsoDate(source.dataAjuizamento),
     valorCausa: source.valorCausa != null ? String(source.valorCausa) : (source.valorAcao != null ? String(source.valorAcao) : ""),
-    ultimoAndamento: last ? `${last.nome ?? ""}${last.dataHora ? ` (${String(last.dataHora).slice(0, 10)})` : ""}` : "",
+    ultimoAndamento: last ? `${last.nome ?? ""}${lastDate ? ` (${lastDate})` : ""}` : "",
   };
 }
