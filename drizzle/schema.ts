@@ -212,6 +212,8 @@ export const legalCases = mysqlTable("legal_cases", {
   dataDistribuicao: date("dataDistribuicao", { mode: "string" }),
   audiencia: date("audiencia", { mode: "string" }),
   ultimoAndamento: text("ultimoAndamento"),
+  /** Full movement history (JSON array of {data, nome}) from the source API. */
+  movimentos: text("movimentos"),
   fonte: varchar("fonte", { length: 50 }),
   lastSyncAt: timestamp("lastSyncAt"),
   ...timestamps,

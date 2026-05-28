@@ -1,0 +1,1 @@
+ALTER TABLE `legal_cases` ADD `movimentos` text;

@@ -144,8 +144,11 @@ export async function lookupProcess(numero: string, apiKey: string): Promise<Rec
   const source = json?.hits?.hits?.[0]?._source;
   if (!source) return null;
   const movs: any[] = Array.isArray(source.movimentos) ? source.movimentos : [];
-  const last = movs.slice().sort((a, b) => String(b?.dataHora ?? "").localeCompare(String(a?.dataHora ?? "")))[0];
-  const lastDate = last ? toIsoDate(last.dataHora) : "";
+  const timeline = movs
+    .map((mv) => ({ data: toIsoDate(mv.dataHora), nome: String(mv.nome ?? mv.descricao ?? "").trim() }))
+    .filter((mv) => mv.nome)
+    .sort((a, b) => b.data.localeCompare(a.data));
+  const last = timeline[0];
   const assuntos = Array.isArray(source.assuntos) ? source.assuntos.map((a: any) => a?.nome).filter(Boolean).join(", ") : "";
   return {
     tribunal: String(source.tribunal ?? ""),
@@ -155,6 +158,7 @@ export async function lookupProcess(numero: string, apiKey: string): Promise<Rec
     orgaoJulgador: String(source.orgaoJulgador?.nome ?? ""),
     dataAjuizamento: toIsoDate(source.dataAjuizamento),
     valorCausa: source.valorCausa != null ? String(source.valorCausa) : (source.valorAcao != null ? String(source.valorAcao) : ""),
-    ultimoAndamento: last ? `${last.nome ?? ""}${lastDate ? ` (${lastDate})` : ""}` : "",
+    ultimoAndamento: last ? `${last.nome}${last.data ? ` (${last.data})` : ""}` : "",
+    movimentos: timeline.length ? JSON.stringify(timeline) : "",
   };
 }

@@ -1198,6 +1198,7 @@ export const appRouter = router({
         dataDistribuicao: data.dataAjuizamento || c.dataDistribuicao,
         valorCausa: data.valorCausa || c.valorCausa,
         ultimoAndamento: data.ultimoAndamento || c.ultimoAndamento,
+        movimentos: data.movimentos || c.movimentos,
         fonte: "datajud",
         lastSyncAt: new Date(),
       } as any);
@@ -1267,6 +1268,7 @@ export const appRouter = router({
           dataDistribuicao: data.dataAjuizamento || null,
           valorCausa: data.valorCausa || null,
           ultimoAndamento: data.ultimoAndamento || null,
+          movimentos: data.movimentos || null,
           fonte: "datajud",
           lastSyncAt: new Date(),
           status: "active",

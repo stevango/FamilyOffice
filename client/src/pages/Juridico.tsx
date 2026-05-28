@@ -42,6 +42,7 @@ import {
   Loader2,
   Users,
   Bot,
+  History,
 } from "lucide-react";
 import { toast } from "sonner";
 import { downloadCsv } from "@/lib/export";
@@ -115,6 +116,13 @@ export default function Juridico() {
     onError: (e) => { toast.error(e.message ?? "Falha na explicação por IA"); setExplainFor(null); },
   });
   const explain = (c: any) => { setExplainFor({ title: c.title }); setExplanation(""); explainMutation.mutate({ id: c.id }); };
+
+  const [timelineFor, setTimelineFor] = useState<{ title: string; movimentos: { data: string; nome: string }[] } | null>(null);
+  const openTimeline = (c: any) => {
+    let movs: { data: string; nome: string }[] = [];
+    try { if (c.movimentos) movs = JSON.parse(c.movimentos); } catch { /* ignore */ }
+    setTimelineFor({ title: c.title, movimentos: movs });
+  };
 
   const [importOpen, setImportOpen] = useState(false);
   const [importProvider, setImportProvider] = useState("datajud");
@@ -349,6 +357,11 @@ export default function Juridico() {
                         </div>
                       )}
                       <div className="flex items-center gap-1">
+                        {c.movimentos && (
+                          <Button variant="ghost" size="icon" className="h-8 w-8" title="Ver histórico" onClick={() => openTimeline(c)}>
+                            <History className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                         <Button variant="ghost" size="icon" className="h-8 w-8" title="Explicar com IA"
                           disabled={explainMutation.isPending} onClick={() => explain(c)}>
                           <Bot className="h-3.5 w-3.5 text-primary" />
@@ -431,6 +444,32 @@ export default function Juridico() {
               Buscar e cadastrar
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Timeline / histórico dialog */}
+      <Dialog open={timelineFor != null} onOpenChange={(v) => { if (!v) setTimelineFor(null); }}>
+        <DialogContent className="bg-card border-border max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><History className="h-4 w-4 text-primary" /> Histórico do processo</DialogTitle>
+          </DialogHeader>
+          {timelineFor && <p className="text-xs text-muted-foreground -mt-2">{timelineFor.title} · {timelineFor.movimentos.length} andamento(s)</p>}
+          <div className="max-h-[60vh] overflow-y-auto">
+            {timelineFor && timelineFor.movimentos.length > 0 ? (
+              <ol className="relative border-l border-border ml-2 space-y-4 py-1">
+                {timelineFor.movimentos.map((mv, i) => (
+                  <li key={i} className="ml-4">
+                    <span className="absolute -left-[5px] mt-1.5 h-2 w-2 rounded-full bg-primary" />
+                    <p className="text-[11px] text-muted-foreground">{mv.data ? new Date(mv.data + "T00:00:00").toLocaleDateString("pt-BR") : "—"}</p>
+                    <p className="text-sm">{mv.nome}</p>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="text-sm text-muted-foreground py-4 text-center">Nenhum andamento importado.</p>
+            )}
+          </div>
+          <p className="text-[10px] text-muted-foreground">Andamentos importados do DataJud na última sincronização.</p>
         </DialogContent>
       </Dialog>
 
