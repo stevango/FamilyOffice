@@ -1,6 +1,6 @@
 /** Catalog of partner integrations, shared by client and server. */
 
-export type IntegrationProvider = "jusbrasil" | "claude" | "openai";
+export type IntegrationProvider = "jusbrasil" | "digesto" | "claude" | "openai";
 
 export interface IntegrationMeta {
   id: IntegrationProvider;
@@ -26,6 +26,16 @@ export const INTEGRATIONS: IntegrationMeta[] = [
     credentialLabel: "Token de API",
     docsUrl: "https://api.jusbrasil.com.br/docs/index.html",
     supportsSync: true,
+  },
+  {
+    id: "digesto",
+    name: "Digesto",
+    description: "Monitoramento de processos judiciais e importação dos andamentos para o módulo Jurídico.",
+    feeds: "Jurídico",
+    credentialLabel: "Token de API (Digesto)",
+    docsUrl: "https://op.digesto.com.br/doc_api/monitoramento.html",
+    supportsSync: true,
+    supportsTest: true,
   },
   {
     id: "claude",
