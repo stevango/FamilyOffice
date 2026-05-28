@@ -122,3 +122,26 @@ export async function syncDatajud(ctx: DatajudSyncContext): Promise<{ imported: 
 export async function verifyDatajud(apiKey: string): Promise<void> {
   await datajudSearch("tjsp", { size: 0, query: { match_all: {} } }, apiKey);
 }
+
+/** Look up a single process by CNJ number, returning structured fields. */
+export async function lookupProcess(numero: string, apiKey: string): Promise<Record<string, string> | null> {
+  const digits = numero.replace(/\D/g, "");
+  const alias = aliasForNumero(digits);
+  if (!alias) return null;
+  const json = await datajudSearch(alias, { size: 1, query: { match: { numeroProcesso: digits } } }, apiKey);
+  const source = json?.hits?.hits?.[0]?._source;
+  if (!source) return null;
+  const movs: any[] = Array.isArray(source.movimentos) ? source.movimentos : [];
+  const last = movs.slice().sort((a, b) => String(b?.dataHora ?? "").localeCompare(String(a?.dataHora ?? "")))[0];
+  const assuntos = Array.isArray(source.assuntos) ? source.assuntos.map((a: any) => a?.nome).filter(Boolean).join(", ") : "";
+  return {
+    tribunal: String(source.tribunal ?? ""),
+    classe: String(source.classe?.nome ?? ""),
+    assunto: assuntos,
+    grau: String(source.grau ?? ""),
+    orgaoJulgador: String(source.orgaoJulgador?.nome ?? ""),
+    dataAjuizamento: source.dataAjuizamento ? String(source.dataAjuizamento).slice(0, 10) : "",
+    valorCausa: source.valorCausa != null ? String(source.valorCausa) : (source.valorAcao != null ? String(source.valorAcao) : ""),
+    ultimoAndamento: last ? `${last.nome ?? ""}${last.dataHora ? ` (${String(last.dataHora).slice(0, 10)})` : ""}` : "",
+  };
+}

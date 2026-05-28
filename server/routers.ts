@@ -29,7 +29,7 @@ import { decryptSecret, encryptSecret, secretHint } from "./crypto";
 import { extractFields, extractText } from "./extract";
 import { IntegrationPendingError, syncJusbrasil } from "./jusbrasil";
 import { syncDigesto, verifyDigesto } from "./digesto";
-import { syncDatajud, verifyDatajud } from "./datajud";
+import { syncDatajud, verifyDatajud, lookupProcess } from "./datajud";
 import { ExternalLookupError } from "./lookup";
 import { storageDelete, storagePut, storageReadBuffer } from "./storage";
 
@@ -1116,7 +1116,28 @@ export const appRouter = router({
       nextDeadline: z.string().optional(),
       description: z.string().optional(),
       notes: z.string().optional(),
-    })).mutation(async ({ ctx, input }) => db.createLegalCase({ ...input, userId: ctx.user.id, nextDeadline: input.nextDeadline || null })),
+      area: z.enum(["civel", "trabalhista", "tributario", "criminal", "familia", "empresarial", "consumidor", "administrativo", "outro"]).optional(),
+      polo: z.enum(["autor", "reu", "interessado", "terceiro", "exequente", "executado", "reclamante", "reclamado", "outro"]).optional(),
+      risco: z.enum(["baixo", "medio", "alto", "critico"]).optional(),
+      vinculo: z.string().optional(),
+      valorCausa: z.string().optional(),
+      classe: z.string().optional(),
+      assunto: z.string().optional(),
+      grau: z.string().optional(),
+      comarca: z.string().optional(),
+      vara: z.string().optional(),
+      dataDistribuicao: z.string().optional(),
+      audiencia: z.string().optional(),
+    })).mutation(async ({ ctx, input }) => db.createLegalCase({
+      ...input,
+      userId: ctx.user.id,
+      nextDeadline: input.nextDeadline || null,
+      valorCausa: input.valorCausa || null,
+      dataDistribuicao: input.dataDistribuicao || null,
+      audiencia: input.audiencia || null,
+      estimatedCost: input.estimatedCost || null,
+      actualCost: input.actualCost || null,
+    })),
     update: writeProcedure.input(z.object({
       id: z.number(),
       title: z.string().min(1).optional(),
@@ -1130,10 +1151,57 @@ export const appRouter = router({
       nextDeadline: z.string().optional(),
       description: z.string().optional(),
       notes: z.string().optional(),
+      area: z.enum(["civel", "trabalhista", "tributario", "criminal", "familia", "empresarial", "consumidor", "administrativo", "outro"]).optional(),
+      polo: z.enum(["autor", "reu", "interessado", "terceiro", "exequente", "executado", "reclamante", "reclamado", "outro"]).optional(),
+      risco: z.enum(["baixo", "medio", "alto", "critico"]).optional(),
+      vinculo: z.string().optional(),
+      valorCausa: z.string().optional(),
+      classe: z.string().optional(),
+      assunto: z.string().optional(),
+      grau: z.string().optional(),
+      comarca: z.string().optional(),
+      vara: z.string().optional(),
+      dataDistribuicao: z.string().optional(),
+      audiencia: z.string().optional(),
     })).mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
+      for (const k of ["valorCausa", "dataDistribuicao", "audiencia", "nextDeadline", "estimatedCost", "actualCost"]) {
+        if ((data as Record<string, unknown>)[k] === "") (data as Record<string, unknown>)[k] = null;
+      }
       await db.updateLegalCase(id, ctx.user.householdId, data as any);
       return { success: true };
+    }),
+    /** Enrich a case from the DataJud public API (by CNJ number). */
+    enrich: writeProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+      const cases = await db.getLegalCases(ctx.user.householdId);
+      const c = cases.find((x) => x.id === input.id);
+      if (!c) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado." });
+      const numero = (c.caseNumber ?? "").replace(/\D/g, "");
+      if (numero.length !== 20) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Informe o número CNJ (20 dígitos) para consultar o DataJud." });
+      }
+      const row = await db.getIntegration(ctx.user.householdId, "datajud");
+      const apiKey = row?.credentials ? decryptSecret(row.credentials) : "";
+      let data: Record<string, string> | null;
+      try {
+        data = await lookupProcess(numero, apiKey);
+      } catch (err) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: err instanceof Error ? err.message : "Falha na consulta ao DataJud." });
+      }
+      if (!data) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado no DataJud (verifique o número/tribunal)." });
+      await db.updateLegalCase(c.id, ctx.user.householdId, {
+        court: data.orgaoJulgador || c.court,
+        vara: data.orgaoJulgador || c.vara,
+        classe: data.classe || c.classe,
+        assunto: data.assunto || c.assunto,
+        grau: data.grau || c.grau,
+        dataDistribuicao: data.dataAjuizamento || c.dataDistribuicao,
+        valorCausa: data.valorCausa || c.valorCausa,
+        ultimoAndamento: data.ultimoAndamento || c.ultimoAndamento,
+        fonte: "datajud",
+        lastSyncAt: new Date(),
+      } as any);
+      return { success: true, ...data };
     }),
     delete: writeProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
       await db.deleteLegalCase(input.id, ctx.user.householdId);

@@ -198,6 +198,22 @@ export const legalCases = mysqlTable("legal_cases", {
   nextDeadline: date("nextDeadline", { mode: "string" }),
   description: text("description"),
   notes: text("notes"),
+  // Inteligência jurídica (classificação + metadados das APIs DataJud/Jusbrasil/Digesto)
+  area: mysqlEnum("area", ["civel", "trabalhista", "tributario", "criminal", "familia", "empresarial", "consumidor", "administrativo", "outro"]),
+  polo: mysqlEnum("polo", ["autor", "reu", "interessado", "terceiro", "exequente", "executado", "reclamante", "reclamado", "outro"]),
+  risco: mysqlEnum("risco", ["baixo", "medio", "alto", "critico"]),
+  vinculo: varchar("vinculo", { length: 255 }),
+  valorCausa: decimal("valorCausa", { precision: 15, scale: 2 }),
+  classe: varchar("classe", { length: 255 }),
+  assunto: varchar("assunto", { length: 500 }),
+  grau: varchar("grau", { length: 50 }),
+  comarca: varchar("comarca", { length: 255 }),
+  vara: varchar("vara", { length: 255 }),
+  dataDistribuicao: date("dataDistribuicao", { mode: "string" }),
+  audiencia: date("audiencia", { mode: "string" }),
+  ultimoAndamento: text("ultimoAndamento"),
+  fonte: varchar("fonte", { length: 50 }),
+  lastSyncAt: timestamp("lastSyncAt"),
   ...timestamps,
 }, (t) => [index("legal_cases_userId_idx").on(t.userId)]);
 
