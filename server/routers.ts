@@ -22,7 +22,7 @@ import {
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router, writeProcedure } from "./_core/trpc";
 import * as db from "./db";
-import { aiClassifyAndExtract, aiExtractFields, chatAssistant, summarizeDocument, verifyAiKey, type AiProvider } from "./ai";
+import { aiClassifyAndExtract, aiExtractFields, chatAssistant, explainLegalCase, summarizeDocument, verifyAiKey, type AiProvider } from "./ai";
 import { lookupCep } from "./cep";
 import { lookupCnpj } from "./cnpj";
 import { decryptSecret, encryptSecret, secretHint } from "./crypto";
@@ -1202,6 +1202,35 @@ export const appRouter = router({
         lastSyncAt: new Date(),
       } as any);
       return { success: true, ...data };
+    }),
+    /** Plain-language explanation of a case via the configured AI. */
+    explain: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+      const cases = await db.getLegalCases(ctx.user.householdId);
+      const c = cases.find((x) => x.id === input.id);
+      if (!c) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado." });
+      const ai = await resolveAi(ctx.user.householdId);
+      if (!ai) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configure um Consultor IA (Claude ou OpenAI) em Integrações." });
+      const processo = [
+        c.title && `Título: ${c.title}`,
+        c.caseNumber && `Número CNJ: ${c.caseNumber}`,
+        c.area && `Área: ${c.area}`,
+        c.polo && `Posição da família: ${c.polo}`,
+        c.classe && `Classe: ${c.classe}`,
+        c.assunto && `Assunto: ${c.assunto}`,
+        (c.vara || c.court) && `Órgão/Vara: ${c.vara || c.court}`,
+        c.grau && `Grau: ${c.grau}`,
+        c.status && `Status: ${c.status}`,
+        c.valorCausa && `Valor da causa: R$ ${c.valorCausa}`,
+        c.nextDeadline && `Próximo prazo: ${c.nextDeadline}`,
+        c.ultimoAndamento && `Último andamento: ${c.ultimoAndamento}`,
+        c.description && `Descrição: ${c.description}`,
+      ].filter(Boolean).join("\n");
+      try {
+        const explanation = await explainLegalCase({ provider: ai.provider, apiKey: ai.apiKey, processo });
+        return { explanation };
+      } catch (err) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: err instanceof Error ? err.message : "Falha na explicação por IA." });
+      }
     }),
     delete: writeProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
       await db.deleteLegalCase(input.id, ctx.user.householdId);

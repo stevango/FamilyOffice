@@ -278,3 +278,23 @@ export async function chatAssistant(opts: {
   ].join("\n");
   return callAi({ provider: opts.provider, apiKey: opts.apiKey, system, messages: opts.messages, maxTokens: 1500 });
 }
+
+/** Explain a legal case in plain language for a layperson (pt-BR). */
+export async function explainLegalCase(opts: {
+  provider: AiProvider;
+  apiKey: string;
+  processo: string;
+}): Promise<string> {
+  const system = [
+    "Você é um advogado que explica processos judiciais em linguagem simples para um cliente leigo, em português do Brasil.",
+    "Com base apenas nos dados fornecidos, produza uma explicação curta e prática, em tópicos, contendo quando possível:",
+    "1) Do que trata o processo (1–2 frases simples).",
+    "2) O que significa a última movimentação.",
+    "3) A consequência prática e qual provavelmente é o próximo passo.",
+    "4) O nível de risco aparente e o porquê.",
+    "5) Perguntas úteis para fazer ao advogado.",
+    "Não invente fatos que não estejam nos dados; se faltar informação, diga o que falta. Evite juridiquês.",
+  ].join("\n");
+  const messages: ChatMessage[] = [{ role: "user", content: `Dados do processo:\n${opts.processo}` }];
+  return callAi({ provider: opts.provider, apiKey: opts.apiKey, system, messages, maxTokens: 900 });
+}

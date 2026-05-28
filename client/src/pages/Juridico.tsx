@@ -41,6 +41,7 @@ import {
   Clock,
   Loader2,
   Users,
+  Bot,
 } from "lucide-react";
 import { toast } from "sonner";
 import { downloadCsv } from "@/lib/export";
@@ -107,6 +108,13 @@ export default function Juridico() {
     onSuccess: () => { invalidate(); toast.success("Processo atualizado pelo DataJud"); },
     onError: (e) => toast.error(e.message ?? "Falha ao consultar o DataJud"),
   });
+  const [explainFor, setExplainFor] = useState<{ title: string } | null>(null);
+  const [explanation, setExplanation] = useState<string>("");
+  const explainMutation = trpc.legalCases.explain.useMutation({
+    onSuccess: (r) => setExplanation(r.explanation),
+    onError: (e) => { toast.error(e.message ?? "Falha na explicação por IA"); setExplainFor(null); },
+  });
+  const explain = (c: any) => { setExplainFor({ title: c.title }); setExplanation(""); explainMutation.mutate({ id: c.id }); };
 
   const openNew = () => { setEditingId(null); setForm({ ...emptyForm }); setOpen(true); };
   const openEdit = (c: any) => {
@@ -318,6 +326,10 @@ export default function Juridico() {
                         </div>
                       )}
                       <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" title="Explicar com IA"
+                          disabled={explainMutation.isPending} onClick={() => explain(c)}>
+                          <Bot className="h-3.5 w-3.5 text-primary" />
+                        </Button>
                         <Button variant="ghost" size="icon" className="h-8 w-8" title="Atualizar via DataJud"
                           disabled={enrichMutation.isPending} onClick={() => enrichMutation.mutate({ id: c.id })}>
                           {enrichMutation.isPending && enrichMutation.variables?.id === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
@@ -345,6 +357,24 @@ export default function Juridico() {
           </CardContent>
         </Card>
       )}
+
+      {/* AI explanation dialog */}
+      <Dialog open={explainFor != null} onOpenChange={(v) => { if (!v) setExplainFor(null); }}>
+        <DialogContent className="bg-card border-border max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Bot className="h-4 w-4 text-primary" /> Explicação do processo (IA)</DialogTitle>
+          </DialogHeader>
+          {explainFor && <p className="text-xs text-muted-foreground -mt-2">{explainFor.title}</p>}
+          {explainMutation.isPending ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-6 justify-center">
+              <Loader2 className="h-4 w-4 animate-spin" /> Analisando o processo...
+            </div>
+          ) : (
+            <div className="text-sm whitespace-pre-wrap leading-relaxed max-h-[60vh] overflow-y-auto">{explanation}</div>
+          )}
+          <p className="text-[10px] text-muted-foreground">Explicação gerada por IA com base nos dados cadastrados — não substitui orientação do seu advogado.</p>
+        </DialogContent>
+      </Dialog>
 
       {/* Create / edit dialog */}
       <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setEditingId(null); setForm({ ...emptyForm }); } }}>
