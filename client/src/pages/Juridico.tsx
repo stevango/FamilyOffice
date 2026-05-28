@@ -116,6 +116,26 @@ export default function Juridico() {
   });
   const explain = (c: any) => { setExplainFor({ title: c.title }); setExplanation(""); explainMutation.mutate({ id: c.id }); };
 
+  const [importOpen, setImportOpen] = useState(false);
+  const [importProvider, setImportProvider] = useState("datajud");
+  const [importQuery, setImportQuery] = useState("");
+  const importMutation = trpc.legalCases.importFromApi.useMutation({
+    onSuccess: (r: any) => {
+      invalidate();
+      if (r.imported > 0) toast.success(`${r.imported} processo(s) cadastrado(s)`);
+      else toast.message(r.message ?? "Nenhum processo novo encontrado");
+      if (r.imported > 0) setImportOpen(false);
+    },
+    onError: (e) => toast.error(e.message ?? "Falha na busca"),
+  });
+  const runImport = () => {
+    if (importProvider === "datajud" && importQuery.replace(/\D/g, "").length !== 20) {
+      toast.error("Informe o número CNJ (20 dígitos) para o DataJud");
+      return;
+    }
+    importMutation.mutate({ provider: importProvider as any, query: importQuery || undefined });
+  };
+
   const openNew = () => { setEditingId(null); setForm({ ...emptyForm }); setOpen(true); };
   const openEdit = (c: any) => {
     setEditingId(c.id);
@@ -270,6 +290,9 @@ export default function Juridico() {
           <Button variant="outline" size="sm" className="gap-2" onClick={handleExport}>
             <Download className="h-4 w-4" /> Exportar
           </Button>
+          <Button variant="outline" size="sm" className="gap-2" onClick={() => { setImportOpen(true); setImportQuery(""); }}>
+            <Search className="h-4 w-4" /> Buscar nas APIs
+          </Button>
           <Button size="sm" className="gap-2" onClick={openNew}>
             <Plus className="h-4 w-4" /> Novo Processo
           </Button>
@@ -369,6 +392,47 @@ export default function Juridico() {
           </CardContent>
         </Card>
       )}
+
+      {/* Search / import from APIs */}
+      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+        <DialogContent className="bg-card border-border max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Search className="h-4 w-4 text-primary" /> Buscar e cadastrar processos</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Fonte</Label>
+              <Select value={importProvider} onValueChange={(v) => { setImportProvider(v); setImportQuery(""); }}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="datajud">DataJud (CNJ) — por número CNJ</SelectItem>
+                  <SelectItem value="jusbrasil">Jusbrasil — monitoramento por parte</SelectItem>
+                  <SelectItem value="digesto">Digesto — monitoramento por parte</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {importProvider === "datajud" ? (
+              <div className="space-y-2">
+                <Label>Número CNJ</Label>
+                <Input value={importQuery} onChange={(e) => setImportQuery(e.target.value)} placeholder="0000000-00.0000.0.00.0000" />
+                <p className="text-xs text-muted-foreground">O DataJud (CNJ) consulta por número do processo. Busca por nome/CPF não é possível na API pública (LGPD) — use Jusbrasil ou Digesto.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>CPF / CNPJ ou nome (opcional)</Label>
+                <Input value={importQuery} onChange={(e) => setImportQuery(e.target.value)} placeholder="Ex: 000.000.000-00 ou nome da parte" />
+                <p className="text-xs text-muted-foreground">
+                  Importa os processos do monitoramento configurado no {importProvider === "digesto" ? "Digesto" : "Jusbrasil"} (requer o token salvo em Integrações). Os processos encontrados são cadastrados automaticamente para acompanhamento.
+                </p>
+              </div>
+            )}
+            <Button className="w-full gap-2" onClick={runImport} disabled={importMutation.isPending}>
+              {importMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              Buscar e cadastrar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* AI explanation dialog */}
       <Dialog open={explainFor != null} onOpenChange={(v) => { if (!v) setExplainFor(null); }}>

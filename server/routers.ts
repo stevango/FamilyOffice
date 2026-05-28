@@ -1232,6 +1232,62 @@ export const appRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: err instanceof Error ? err.message : "Falha na explicação por IA." });
       }
     }),
+    /** Search a partner API and auto-register the processes found. */
+    importFromApi: writeProcedure.input(z.object({
+      provider: z.enum(["datajud", "jusbrasil", "digesto"]),
+      query: z.string().optional(),
+    })).mutation(async ({ ctx, input }) => {
+      if (input.provider === "datajud") {
+        const numero = (input.query ?? "").replace(/\D/g, "");
+        if (numero.length !== 20) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "O DataJud consulta por número CNJ (20 dígitos). Para buscar por nome/CPF, use Jusbrasil ou Digesto." });
+        }
+        const row = await db.getIntegration(ctx.user.householdId, "datajud");
+        const apiKey = row?.credentials ? decryptSecret(row.credentials) : "";
+        let data: Record<string, string> | null;
+        try {
+          data = await lookupProcess(numero, apiKey);
+        } catch (err) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: err instanceof Error ? err.message : "Falha na consulta ao DataJud." });
+        }
+        if (!data) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado no DataJud (verifique o número/tribunal)." });
+        const existing = await db.getLegalCases(ctx.user.householdId);
+        if (existing.some((c) => (c.caseNumber ?? "").replace(/\D/g, "") === numero)) {
+          return { imported: 0, message: "Processo já estava cadastrado." };
+        }
+        await db.createLegalCase({
+          userId: ctx.user.id,
+          title: data.classe ? `${data.classe} — ${(input.query ?? "").trim()}` : `Processo ${(input.query ?? "").trim()}`,
+          caseNumber: (input.query ?? "").trim(),
+          court: data.orgaoJulgador || null,
+          vara: data.orgaoJulgador || null,
+          classe: data.classe || null,
+          assunto: data.assunto || null,
+          grau: data.grau || null,
+          dataDistribuicao: data.dataAjuizamento || null,
+          valorCausa: data.valorCausa || null,
+          ultimoAndamento: data.ultimoAndamento || null,
+          fonte: "datajud",
+          lastSyncAt: new Date(),
+          status: "active",
+        } as any);
+        return { imported: 1 };
+      }
+      // Jusbrasil / Digesto: monitoring-based import (needs the partner token).
+      const row = await db.getIntegration(ctx.user.householdId, input.provider);
+      if (!row?.credentials) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: `Configure o token do ${input.provider === "digesto" ? "Digesto" : "Jusbrasil"} em Integrações.` });
+      }
+      const apiKey = decryptSecret(row.credentials);
+      try {
+        const fn = input.provider === "digesto" ? syncDigesto : syncJusbrasil;
+        const { imported } = await fn({ apiKey, householdId: ctx.user.householdId, userId: ctx.user.id });
+        return { imported };
+      } catch (err) {
+        const pending = err instanceof IntegrationPendingError;
+        throw new TRPCError({ code: pending ? "NOT_IMPLEMENTED" : "BAD_REQUEST", message: err instanceof Error ? err.message : "Falha na busca." });
+      }
+    }),
     delete: writeProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
       await db.deleteLegalCase(input.id, ctx.user.householdId);
       return { success: true };
