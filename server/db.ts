@@ -464,9 +464,9 @@ export async function deleteLegalCase(id: number, householdId: number) {
   await getDb().delete(legalCases).where(and(eq(legalCases.id, id), inArray(legalCases.userId, memberIds(householdId))));
 }
 
-// ============ ALERTS ============
+// ============ ALERTS (stored notifications) ============
 
-export async function getAlerts(householdId: number, limit = 100) {
+export async function listAlertRecords(householdId: number, limit = 100) {
   return getDb().select().from(alerts)
     .where(eq(alerts.householdId, householdId))
     .orderBy(desc(alerts.createdAt))

@@ -1345,7 +1345,7 @@ export const appRouter = router({
 
   // ============ ALERTS ============
   alerts: router({
-    list: protectedProcedure.query(async ({ ctx }) => db.getAlerts(ctx.user.householdId)),
+    list: protectedProcedure.query(async ({ ctx }) => db.listAlertRecords(ctx.user.householdId)),
     unreadCount: protectedProcedure.query(async ({ ctx }) => ({ count: await db.countUnreadAlerts(ctx.user.householdId) })),
     markRead: writeProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
       await db.markAlertRead(input.id, ctx.user.householdId);
