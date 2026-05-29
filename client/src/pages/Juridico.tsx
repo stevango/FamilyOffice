@@ -162,6 +162,25 @@ export default function Juridico() {
 
   const quickEsfera = (id: number, esfera: string) => updateMutation.mutate({ id, esfera: esfera as any });
 
+  const fillMutation = trpc.legalCases.fillFromAi.useMutation({
+    onSuccess: (r: any) => {
+      invalidate();
+      const f = r.filled ?? {};
+      const keys = Object.keys(f);
+      if (keys.length === 0) { toast.message("A IA não encontrou novos dados para preencher"); return; }
+      setForm((prev) => {
+        const next = { ...prev } as any;
+        for (const k of keys) {
+          if (k === "valorCausa") next.valorCausa = maskMoney(String(f[k]).replace(/[^\d,]/g, ""));
+          else if (!next[k]) next[k] = f[k];
+        }
+        return next;
+      });
+      toast.success(`IA preencheu: ${keys.join(", ")}`);
+    },
+    onError: (e) => toast.error(e.message ?? "Falha ao preencher com IA"),
+  });
+
   const classifyMutation = trpc.legalCases.classify.useMutation({
     onSuccess: (r: any) => {
       invalidate();
@@ -662,10 +681,16 @@ export default function Juridico() {
               <Input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Ex: Ação Trabalhista - Empresa X" />
             </div>
             {editingId != null && (
-              <Button type="button" variant="outline" size="sm" className="gap-2" disabled={classifyMutation.isPending} onClick={() => classifyMutation.mutate({ id: editingId })}>
-                {classifyMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 text-primary" />}
-                Classificar com IA (esfera, área, risco)
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" className="gap-2" disabled={fillMutation.isPending} onClick={() => fillMutation.mutate({ id: editingId })}>
+                  {fillMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bot className="h-3.5 w-3.5 text-primary" />}
+                  Preencher campos com IA (consulta + anexos)
+                </Button>
+                <Button type="button" variant="outline" size="sm" className="gap-2" disabled={classifyMutation.isPending} onClick={() => classifyMutation.mutate({ id: editingId })}>
+                  {classifyMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 text-primary" />}
+                  Classificar (esfera, área, risco)
+                </Button>
+              </div>
             )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">

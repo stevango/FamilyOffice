@@ -22,7 +22,7 @@ import {
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router, writeProcedure } from "./_core/trpc";
 import * as db from "./db";
-import { aiClassifyAndExtract, aiExtractFields, chatAssistant, classifyLegalCase, explainLegalCase, summarizeDocument, verifyAiKey, type AiProvider } from "./ai";
+import { aiClassifyAndExtract, aiExtractFields, chatAssistant, classifyLegalCase, explainLegalCase, fillLegalCase, summarizeDocument, verifyAiKey, type AiProvider } from "./ai";
 import { checkHouseholdUpdates } from "./legalMonitor";
 import { lookupCep } from "./cep";
 import { lookupCnpj } from "./cnpj";
@@ -1320,6 +1320,52 @@ export const appRouter = router({
         return { success: true, ...r };
       } catch (err) {
         throw new TRPCError({ code: "BAD_REQUEST", message: err instanceof Error ? err.message : "Falha na classificação por IA." });
+      }
+    }),
+    /** Use AI to fill missing case fields from its data + attached documents. */
+    fillFromAi: writeProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+      const cases = await db.getLegalCases(ctx.user.householdId);
+      const c = cases.find((x) => x.id === input.id);
+      if (!c) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado." });
+      const ai = await resolveAi(ctx.user.householdId);
+      if (!ai) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configure um Consultor IA (Claude ou OpenAI) em Integrações." });
+
+      const candidates = ["esfera", "area", "risco", "polo", "lawyer", "vinculo", "valorCausa", "comarca", "assunto"] as const;
+      const faltando = candidates.filter((k) => !(c as any)[k]);
+      if (faltando.length === 0) return { success: true, filled: {} as Record<string, string> };
+
+      // Read text from attached Cofre documents (best-effort, capped).
+      let anexosTexto = "";
+      try {
+        const ids: number[] = c.documentIds ? JSON.parse(c.documentIds) : [];
+        for (const id of ids.slice(0, 3)) {
+          const doc = await db.getDocumentById(ctx.user.householdId, id);
+          if (!doc) continue;
+          const buf = await storageReadBuffer(doc.fileKey).catch(() => null);
+          if (!buf) continue;
+          const txt = await extractText(buf, doc.mimeType ?? undefined).catch(() => "");
+          if (txt) anexosTexto += `\n[${doc.title}]\n${txt.slice(0, 4000)}\n`;
+        }
+      } catch { /* ignore */ }
+
+      const contexto = [
+        c.title && `Título: ${c.title}`,
+        c.caseNumber && `Número CNJ: ${c.caseNumber}`,
+        c.classe && `Classe: ${c.classe}`,
+        c.assunto && `Assunto: ${c.assunto}`,
+        (c.vara || c.court) && `Órgão/Vara: ${c.vara || c.court}`,
+        c.valorCausa && `Valor da causa: R$ ${c.valorCausa}`,
+        c.ultimoAndamento && `Último andamento: ${c.ultimoAndamento}`,
+        c.description && `Descrição: ${c.description}`,
+        anexosTexto && `\nTEXTO DOS ANEXOS:${anexosTexto}`,
+      ].filter(Boolean).join("\n");
+
+      try {
+        const filled = await fillLegalCase({ provider: ai.provider, apiKey: ai.apiKey, contexto, faltando });
+        if (Object.keys(filled).length) await db.updateLegalCase(c.id, ctx.user.householdId, filled as any);
+        return { success: true, filled };
+      } catch (err) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: err instanceof Error ? err.message : "Falha ao preencher com IA." });
       }
     }),
     /** Run the monitor now for this household (same routine as the 07:00 job). */

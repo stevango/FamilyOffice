@@ -299,6 +299,53 @@ export async function explainLegalCase(opts: {
   return callAi({ provider: opts.provider, apiKey: opts.apiKey, system, messages, maxTokens: 900 });
 }
 
+/** Fill missing legal-case fields from the available data and attached docs. */
+export async function fillLegalCase(opts: {
+  provider: AiProvider;
+  apiKey: string;
+  contexto: string;
+  faltando: string[];
+}): Promise<Record<string, string>> {
+  const ESF = ["pessoal", "empresarial", "familiar", "outro"];
+  const ARE = ["civel", "trabalhista", "tributario", "criminal", "familia", "empresarial", "consumidor", "administrativo", "outro"];
+  const RIS = ["baixo", "medio", "alto", "critico"];
+  const POL = ["autor", "reu", "interessado", "terceiro", "exequente", "executado", "reclamante", "reclamado", "outro"];
+  const system = "Você extrai e infere dados de processos judiciais. Responda APENAS com um JSON válido, sem texto extra.";
+  const prompt = [
+    "Com base nos dados e textos abaixo, preencha SOMENTE os campos solicitados que conseguir determinar.",
+    "Não invente: se não houver base, omita o campo.",
+    `Campos solicitados: ${opts.faltando.join(", ")}.`,
+    "Regras de valores:",
+    `- esfera ∈ ${JSON.stringify(ESF)}`,
+    `- area ∈ ${JSON.stringify(ARE)}`,
+    `- risco ∈ ${JSON.stringify(RIS)}`,
+    `- polo ∈ ${JSON.stringify(POL)}`,
+    "- lawyer (advogado), vinculo (de quem é: ex. CPF do titular, empresa), valorCausa (ex: \"R$ 10.000,00\"), comarca, assunto: texto livre.",
+    "Responda JSON com apenas as chaves que conseguiu preencher.",
+    "",
+    "DADOS E TEXTOS:",
+    opts.contexto,
+  ].join("\n");
+  const out = await callAi({ provider: opts.provider, apiKey: opts.apiKey, system, messages: [{ role: "user", content: prompt }], maxTokens: 400 });
+  const match = out.match(/\{[\s\S]*\}/);
+  if (!match) return {};
+  try {
+    const j = JSON.parse(match[0]) as Record<string, unknown>;
+    const allowed: Record<string, string[] | null> = { esfera: ESF, area: ARE, risco: RIS, polo: POL, lawyer: null, vinculo: null, valorCausa: null, comarca: null, assunto: null };
+    const result: Record<string, string> = {};
+    for (const [k, v] of Object.entries(j)) {
+      if (!(k in allowed) || !opts.faltando.includes(k)) continue;
+      if (typeof v !== "string" || !v.trim()) continue;
+      const enumVals = allowed[k];
+      if (enumVals && !enumVals.includes(v)) continue;
+      result[k] = v.trim();
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
 /** Classify a legal case (esfera/área/risco) via AI; returns only valid enums. */
 export async function classifyLegalCase(opts: {
   provider: AiProvider;
