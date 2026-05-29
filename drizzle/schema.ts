@@ -214,6 +214,8 @@ export const legalCases = mysqlTable("legal_cases", {
   ultimoAndamento: text("ultimoAndamento"),
   /** Full movement history (JSON array of {data, nome}) from the source API. */
   movimentos: text("movimentos"),
+  /** Cofre Digital document ids attached to this case (JSON array). */
+  documentIds: text("documentIds"),
   fonte: varchar("fonte", { length: 50 }),
   lastSyncAt: timestamp("lastSyncAt"),
   ...timestamps,

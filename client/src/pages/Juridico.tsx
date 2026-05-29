@@ -43,7 +43,10 @@ import {
   Users,
   Bot,
   History,
+  FileText,
+  Paperclip,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { downloadCsv } from "@/lib/export";
 import { maskMoney, parseBRLNum } from "@/lib/currency";
@@ -100,6 +103,7 @@ export default function Juridico() {
   const utils = trpc.useUtils();
 
   const { data: cases, isLoading } = trpc.legalCases.list.useQuery();
+  const { data: allDocs } = trpc.documents.list.useQuery();
   const invalidate = () => { utils.legalCases.list.invalidate(); utils.dashboard.summary.invalidate(); };
 
   const createMutation = trpc.legalCases.create.useMutation({ onSuccess: () => { invalidate(); setOpen(false); toast.success("Processo cadastrado"); } });
@@ -116,6 +120,24 @@ export default function Juridico() {
     onError: (e) => { toast.error(e.message ?? "Falha na explicação por IA"); setExplainFor(null); },
   });
   const explain = (c: any) => { setExplainFor({ title: c.title }); setExplanation(""); explainMutation.mutate({ id: c.id }); };
+
+  const [docsForId, setDocsForId] = useState<number | null>(null);
+  const [docsForTitle, setDocsForTitle] = useState("");
+  const [docSel, setDocSel] = useState<Set<number>>(new Set());
+  const [docSearch, setDocSearch] = useState("");
+  const attachMutation = trpc.legalCases.attachDocuments.useMutation({
+    onSuccess: () => { invalidate(); toast.success("Documentos do processo atualizados"); setDocsForId(null); },
+    onError: (e) => toast.error(e.message ?? "Falha ao salvar"),
+  });
+  const openDocs = (c: any) => {
+    let ids: number[] = [];
+    try { if (c.documentIds) ids = JSON.parse(c.documentIds); } catch { /* ignore */ }
+    setDocSel(new Set(ids));
+    setDocSearch("");
+    setDocsForTitle(c.title);
+    setDocsForId(c.id);
+  };
+  const docCount = (c: any) => { try { return c.documentIds ? (JSON.parse(c.documentIds) as number[]).length : 0; } catch { return 0; } };
 
   const [timelineFor, setTimelineFor] = useState<{ title: string; movimentos: { data: string; nome: string }[] } | null>(null);
   const openTimeline = (c: any) => {
@@ -357,6 +379,10 @@ export default function Juridico() {
                         </div>
                       )}
                       <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 relative" title="Documentos do processo" onClick={() => openDocs(c)}>
+                          <Paperclip className="h-3.5 w-3.5" />
+                          {docCount(c) > 0 && <span className="absolute -top-0.5 -right-0.5 text-[9px] bg-primary text-primary-foreground rounded-full h-3.5 min-w-3.5 px-0.5 flex items-center justify-center">{docCount(c)}</span>}
+                        </Button>
                         {c.movimentos && (
                           <Button variant="ghost" size="icon" className="h-8 w-8" title="Ver histórico" onClick={() => openTimeline(c)}>
                             <History className="h-3.5 w-3.5" />
@@ -444,6 +470,53 @@ export default function Juridico() {
               Buscar e cadastrar
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Documents of the process */}
+      <Dialog open={docsForId != null} onOpenChange={(v) => { if (!v) setDocsForId(null); }}>
+        <DialogContent className="bg-card border-border max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><FileText className="h-4 w-4 text-primary" /> Documentos do processo</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground -mt-2">{docsForTitle}</p>
+          {(() => {
+            const docs = (allDocs as any[] | undefined) ?? [];
+            const q = docSearch.trim().toLowerCase();
+            const shown = q ? docs.filter((d) => (d.title ?? "").toLowerCase().includes(q)) : docs;
+            return docs.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4">Nenhum documento no Cofre Digital. Envie arquivos em Documentos e volte para anexá-los.</p>
+            ) : (
+              <div className="space-y-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input className="pl-9 h-9" placeholder="Buscar documento no Cofre..." value={docSearch} onChange={(e) => setDocSearch(e.target.value)} />
+                </div>
+                <div className="max-h-[50vh] overflow-y-auto divide-y divide-border rounded-md border border-border/60">
+                  {shown.map((d) => (
+                    <div key={d.id} className="flex items-center gap-2 px-3 py-2">
+                      <Checkbox
+                        checked={docSel.has(d.id)}
+                        onCheckedChange={(v) => setDocSel((prev) => { const n = new Set(prev); if (v) n.add(d.id); else n.delete(d.id); return n; })}
+                      />
+                      <span className="text-sm truncate flex-1">{d.title}</span>
+                      {d.hasFile && (
+                        <a href={d.fileUrl} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground" title="Baixar">
+                          <Download className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setDocsForId(null)}>Cancelar</Button>
+                  <Button onClick={() => docsForId != null && attachMutation.mutate({ id: docsForId, documentIds: Array.from(docSel) })} disabled={attachMutation.isPending}>
+                    {attachMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : `Salvar (${docSel.size})`}
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 

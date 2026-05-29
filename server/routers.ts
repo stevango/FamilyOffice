@@ -1290,6 +1290,13 @@ export const appRouter = router({
         throw new TRPCError({ code: pending ? "NOT_IMPLEMENTED" : "BAD_REQUEST", message: err instanceof Error ? err.message : "Falha na busca." });
       }
     }),
+    /** Attach/detach Cofre Digital documents to a legal case. */
+    attachDocuments: writeProcedure.input(z.object({ id: z.number(), documentIds: z.array(z.number()) })).mutation(async ({ ctx, input }) => {
+      await db.updateLegalCase(input.id, ctx.user.householdId, {
+        documentIds: input.documentIds.length ? JSON.stringify(input.documentIds) : null,
+      } as any);
+      return { success: true };
+    }),
     delete: writeProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
       await db.deleteLegalCase(input.id, ctx.user.householdId);
       return { success: true };
