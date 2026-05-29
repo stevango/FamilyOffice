@@ -160,6 +160,8 @@ export default function Juridico() {
   });
   const explain = (c: any) => { setExplainFor({ title: c.title }); setExplanation(""); explainMutation.mutate({ id: c.id }); };
 
+  const quickEsfera = (id: number, esfera: string) => updateMutation.mutate({ id, esfera: esfera as any });
+
   const classifyMutation = trpc.legalCases.classify.useMutation({
     onSuccess: (r: any) => {
       invalidate();
