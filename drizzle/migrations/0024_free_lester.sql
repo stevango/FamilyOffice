@@ -1,0 +1,1 @@
+ALTER TABLE `legal_cases` ADD `esfera` enum('pessoal','empresarial','familiar','outro');

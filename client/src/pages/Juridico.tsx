@@ -86,10 +86,46 @@ const riscoColors: Record<string, string> = {
 const POLO_AUTOR = ["autor", "exequente", "reclamante"];
 const POLO_REU = ["reu", "executado", "reclamado"];
 
+const esferaLabels: Record<string, string> = { pessoal: "Pessoal", empresarial: "Empresarial", familiar: "Familiar", outro: "Outro" };
+const esferaColors: Record<string, string> = {
+  pessoal: "bg-blue-500/10 text-blue-400 border-blue-500/30",
+  empresarial: "bg-purple-500/10 text-purple-400 border-purple-500/30",
+  familiar: "bg-pink-500/10 text-pink-400 border-pink-500/30",
+  outro: "bg-gray-500/10 text-gray-400 border-gray-500/30",
+};
+
+function daysUntil(date?: string | null): number | null {
+  if (!date) return null;
+  const d = new Date(date + "T00:00:00").getTime();
+  if (Number.isNaN(d)) return null;
+  return Math.round((d - Date.now()) / 86400000);
+}
+
+/** Automatic attention triage so the user instantly sees what matters. */
+function atencao(c: any): "preocupar" | "atencao" | "tranquilo" {
+  if (c.status === "closed" || c.status === "archived") return "tranquilo";
+  if (c.risco === "critico" || c.risco === "alto") return "preocupar";
+  const prazo = daysUntil(c.nextDeadline);
+  if (prazo != null && prazo <= 7) return "preocupar";
+  const aud = daysUntil(c.audiencia);
+  if (aud != null && aud >= 0 && aud <= 7) return "preocupar";
+  if (prazo != null && prazo <= 30) return "atencao";
+  if (aud != null && aud >= 0 && aud <= 30) return "atencao";
+  if (!c.lawyer) return "atencao";
+  if (!c.esfera || !c.area || !c.risco) return "atencao"; // falta classificar
+  if (c.risco === "medio") return "atencao";
+  return "tranquilo";
+}
+const atencaoMeta: Record<string, { label: string; color: string; dot: string }> = {
+  preocupar: { label: "Preocupar", color: "bg-red-500/10 text-red-400 border-red-500/30", dot: "bg-red-500" },
+  atencao: { label: "Em atenção", color: "bg-amber-500/10 text-amber-400 border-amber-500/30", dot: "bg-amber-500" },
+  tranquilo: { label: "Tranquilo", color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30", dot: "bg-emerald-500" },
+};
+
 const emptyForm = {
   title: "", caseNumber: "", caseType: "neutral", status: "active", court: "", lawyer: "",
   estimatedCost: "", actualCost: "", nextDeadline: "", description: "", notes: "",
-  area: "", polo: "", risco: "", vinculo: "", valorCausa: "", audiencia: "",
+  area: "", polo: "", risco: "", vinculo: "", valorCausa: "", audiencia: "", esfera: "",
 };
 
 export default function Juridico() {
@@ -100,6 +136,8 @@ export default function Juridico() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [areaFilter, setAreaFilter] = useState("all");
   const [riscoFilter, setRiscoFilter] = useState("all");
+  const [atencaoFilter, setAtencaoFilter] = useState("all");
+  const [esferaFilter, setEsferaFilter] = useState("all");
   const utils = trpc.useUtils();
 
   const { data: cases, isLoading } = trpc.legalCases.list.useQuery();
@@ -173,7 +211,7 @@ export default function Juridico() {
       title: c.title ?? "", caseNumber: c.caseNumber ?? "", caseType: c.caseType ?? "neutral", status: c.status ?? "active",
       court: c.court ?? "", lawyer: c.lawyer ?? "", estimatedCost: c.estimatedCost ?? "", actualCost: c.actualCost ?? "",
       nextDeadline: c.nextDeadline ?? "", description: c.description ?? "", notes: c.notes ?? "",
-      area: c.area ?? "", polo: c.polo ?? "", risco: c.risco ?? "", vinculo: c.vinculo ?? "",
+      area: c.area ?? "", polo: c.polo ?? "", risco: c.risco ?? "", vinculo: c.vinculo ?? "", esfera: c.esfera ?? "",
       valorCausa: c.valorCausa ? maskMoney(String(c.valorCausa).replace(".", ",")) : "", audiencia: c.audiencia ?? "",
     });
     setOpen(true);
@@ -197,6 +235,7 @@ export default function Juridico() {
       area: (form.area || undefined) as any,
       polo: (form.polo || undefined) as any,
       risco: (form.risco || undefined) as any,
+      esfera: (form.esfera || undefined) as any,
       vinculo: form.vinculo || undefined,
       valorCausa: form.valorCausa ? String(parseBRLNum(form.valorCausa)) : undefined,
       audiencia: form.audiencia || undefined,
@@ -213,30 +252,27 @@ export default function Juridico() {
       if (statusFilter !== "all" && c.status !== statusFilter) return false;
       if (areaFilter !== "all" && c.area !== areaFilter) return false;
       if (riscoFilter !== "all" && c.risco !== riscoFilter) return false;
+      if (esferaFilter !== "all" && c.esfera !== esferaFilter) return false;
+      if (atencaoFilter !== "all" && atencao(c) !== atencaoFilter) return false;
       if (q) {
         const hay = [c.title, c.caseNumber, c.lawyer, c.court, c.vara, c.vinculo, c.assunto].filter(Boolean).join(" ").toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [list, search, statusFilter, areaFilter, riscoFilter]);
+  }, [list, search, statusFilter, areaFilter, riscoFilter, esferaFilter, atencaoFilter]);
 
   // ---- Executive metrics ----
   const m = useMemo(() => {
-    const active = list.filter((c) => c.status === "active");
-    const soon = list.filter((c) => {
-      if (!c.nextDeadline) return false;
-      const d = new Date(c.nextDeadline + "T00:00:00").getTime();
-      const days = (d - Date.now()) / 86400000;
-      return days >= -1 && days <= 30;
-    });
     return {
-      ativos: active.length,
+      ativos: list.filter((c) => c.status === "active").length,
       total: list.length,
-      autor: list.filter((c) => POLO_AUTOR.includes(c.polo)).length,
-      reu: list.filter((c) => POLO_REU.includes(c.polo)).length,
-      criticos: list.filter((c) => c.risco === "alto" || c.risco === "critico").length,
-      prazos: soon.length,
+      preocupar: list.filter((c) => atencao(c) === "preocupar").length,
+      atencao: list.filter((c) => atencao(c) === "atencao").length,
+      tranquilo: list.filter((c) => atencao(c) === "tranquilo").length,
+      pessoais: list.filter((c) => c.esfera === "pessoal").length,
+      empresariais: list.filter((c) => c.esfera === "empresarial").length,
+      semClassificar: list.filter((c) => !c.esfera || !c.area || !c.risco).length,
       valorCausas: list.reduce((s, c) => s + (Number(c.valorCausa) || 0), 0),
       custo: list.reduce((s, c) => s + (Number(c.estimatedCost) || 0), 0),
     };
@@ -277,17 +313,52 @@ export default function Juridico() {
         <p className="text-muted-foreground text-sm mt-1">Radar de processos, prazos, riscos e custos — pessoal, familiar e empresarial.</p>
       </div>
 
-      {/* Executive cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* Triage — o que olhar primeiro */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {([
+          { lvl: "preocupar", value: m.preocupar, title: "Preocupar agora", desc: "Risco alto/crítico ou prazo/audiência em até 7 dias." },
+          { lvl: "atencao", value: m.atencao, title: "Ficar de atenção", desc: "Prazo em até 30 dias, sem advogado ou falta classificar." },
+          { lvl: "tranquilo", value: m.tranquilo, title: "Tranquilo", desc: "Sem pendências próximas; encerrados/arquivados." },
+        ] as const).map(({ lvl, value, title, desc }) => {
+          const meta = atencaoMeta[lvl];
+          const active = atencaoFilter === lvl;
+          return (
+            <button key={lvl} type="button" onClick={() => setAtencaoFilter(active ? "all" : lvl)}
+              className={`text-left rounded-lg border p-4 transition ${meta.color} ${active ? "ring-2 ring-current" : "hover:brightness-110"}`}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-2 text-sm font-semibold"><span className={`h-2.5 w-2.5 rounded-full ${meta.dot}`} /> {title}</span>
+                <span className="text-2xl font-bold">{value}</span>
+              </div>
+              <p className="text-[11px] opacity-80 mt-1">{desc}</p>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Esfera + números */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <button type="button" onClick={() => setEsferaFilter(esferaFilter === "pessoal" ? "all" : "pessoal")}
+          className={`text-left rounded-lg border border-border bg-card p-4 hover:bg-accent/30 ${esferaFilter === "pessoal" ? "ring-2 ring-primary" : ""}`}>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground"><User className="h-3.5 w-3.5 text-blue-400" /> Pessoais</div>
+          <p className="text-2xl font-bold mt-1">{m.pessoais}</p>
+        </button>
+        <button type="button" onClick={() => setEsferaFilter(esferaFilter === "empresarial" ? "all" : "empresarial")}
+          className={`text-left rounded-lg border border-border bg-card p-4 hover:bg-accent/30 ${esferaFilter === "empresarial" ? "ring-2 ring-primary" : ""}`}>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground"><Users className="h-3.5 w-3.5 text-purple-400" /> Empresariais</div>
+          <p className="text-2xl font-bold mt-1">{m.empresariais}</p>
+        </button>
         {stat("Ativos", m.ativos, <Gavel className="h-3.5 w-3.5 text-amber-400" />)}
-        {stat("Total", m.total, <Scale className="h-3.5 w-3.5 text-primary" />)}
-        {stat("Como autor", m.autor, <User className="h-3.5 w-3.5 text-emerald-400" />)}
-        {stat("Como réu", m.reu, <Users className="h-3.5 w-3.5 text-red-400" />)}
-        {stat("Críticos", m.criticos, <ShieldAlert className="h-3.5 w-3.5 text-red-400" />, m.criticos ? "text-red-400" : "")}
-        {stat("Prazos ≤30d", m.prazos, <Clock className="h-3.5 w-3.5 text-orange-400" />, m.prazos ? "text-orange-400" : "")}
         {stat("Valor das causas", formatCurrency(m.valorCausas), <DollarSign className="h-3.5 w-3.5 text-primary" />)}
         {stat("Custo estimado", formatCurrency(m.custo), <DollarSign className="h-3.5 w-3.5 text-destructive" />)}
       </div>
+
+      {m.semClassificar > 0 && (
+        <button type="button" onClick={() => setAtencaoFilter("atencao")}
+          className="flex items-center gap-2 w-full rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-300 hover:bg-amber-500/10 text-left">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          {m.semClassificar} processo(s) sem classificação (esfera, área ou risco). Defina para o radar ficar preciso — clique para ver.
+        </button>
+      )}
 
       {/* Filters + actions */}
       <div className="flex flex-col lg:flex-row gap-3 lg:items-center">
@@ -347,6 +418,8 @@ export default function Juridico() {
                       <div className="min-w-0">
                         <p className="font-medium text-sm">{c.title}</p>
                         <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                          {(() => { const a = atencao(c); const meta = atencaoMeta[a]; return <Badge variant="outline" className={`text-[10px] px-1.5 py-0 gap-1 ${meta.color}`}><span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />{meta.label}</Badge>; })()}
+                          {c.esfera && <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${esferaColors[c.esfera] ?? ""}`}>{esferaLabels[c.esfera]}</Badge>}
                           <Badge variant="outline" className="text-[10px] px-1.5 py-0">{statusLabels[c.status]}</Badge>
                           {c.risco && <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${riscoColors[c.risco] ?? ""}`}>{riscoLabels[c.risco]}</Badge>}
                           {c.area && <Badge variant="outline" className="text-[10px] px-1.5 py-0">{areaLabels[c.area]}</Badge>}
@@ -581,11 +654,21 @@ export default function Juridico() {
                 <Input value={form.caseNumber} onChange={(e) => setForm({ ...form, caseNumber: e.target.value })} placeholder="0000000-00.0000.0.00.0000" />
               </div>
               <div className="space-y-2">
-                <Label>Vínculo</Label>
-                <Input value={form.vinculo} onChange={(e) => setForm({ ...form, vinculo: e.target.value })} placeholder="Ex: CPF Stevan, Empresa X, Esposa" />
+                <Label>Esfera</Label>
+                <Select value={form.esfera || "none"} onValueChange={(v) => setForm({ ...form, esfera: v === "none" ? "" : v })}>
+                  <SelectTrigger><SelectValue placeholder="Pessoal ou empresarial" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Não definida</SelectItem>
+                    {Object.entries(esferaLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Vínculo</Label>
+                <Input value={form.vinculo} onChange={(e) => setForm({ ...form, vinculo: e.target.value })} placeholder="Ex: CPF Stevan, Empresa X, Esposa" />
+              </div>
               <div className="space-y-2">
                 <Label>Área</Label>
                 <Select value={form.area || "none"} onValueChange={(v) => setForm({ ...form, area: v === "none" ? "" : v })}>

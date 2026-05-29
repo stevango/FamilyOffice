@@ -200,6 +200,7 @@ export const legalCases = mysqlTable("legal_cases", {
   notes: text("notes"),
   // Inteligência jurídica (classificação + metadados das APIs DataJud/Jusbrasil/Digesto)
   area: mysqlEnum("area", ["civel", "trabalhista", "tributario", "criminal", "familia", "empresarial", "consumidor", "administrativo", "outro"]),
+  esfera: mysqlEnum("esfera", ["pessoal", "empresarial", "familiar", "outro"]),
   polo: mysqlEnum("polo", ["autor", "reu", "interessado", "terceiro", "exequente", "executado", "reclamante", "reclamado", "outro"]),
   risco: mysqlEnum("risco", ["baixo", "medio", "alto", "critico"]),
   vinculo: varchar("vinculo", { length: 255 }),
