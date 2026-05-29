@@ -338,6 +338,8 @@ export async function fillLegalCase(opts: {
       if (typeof v !== "string" || !v.trim()) continue;
       const enumVals = allowed[k];
       if (enumVals && !enumVals.includes(v)) continue;
+      // valorCausa must look monetary, not a free-text subject.
+      if (k === "valorCausa" && !/\d/.test(v)) continue;
       result[k] = v.trim();
     }
     return result;

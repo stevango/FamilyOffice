@@ -1362,6 +1362,12 @@ export const appRouter = router({
 
       try {
         const filled = await fillLegalCase({ provider: ai.provider, apiKey: ai.apiKey, contexto, faltando });
+        // valorCausa must be numeric for the decimal column — coerce or drop it.
+        if (filled.valorCausa != null) {
+          const n = Number(String(filled.valorCausa).replace(/[^\d,.-]/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", "."));
+          if (Number.isFinite(n) && n > 0) filled.valorCausa = String(n);
+          else delete filled.valorCausa;
+        }
         if (Object.keys(filled).length) await db.updateLegalCase(c.id, ctx.user.householdId, filled as any);
         return { success: true, filled };
       } catch (err) {
