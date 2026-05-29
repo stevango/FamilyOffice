@@ -4,6 +4,7 @@ import { migrate } from "drizzle-orm/mysql2/migrator";
 import mysql from "mysql2/promise";
 import path from "node:path";
 import {
+  alerts, type InsertAlert,
   assets, InsertAsset,
   bankAccounts, InsertBankAccount,
   cards, InsertCard,
@@ -461,6 +462,55 @@ export async function updateLegalCase(id: number, householdId: number, data: Par
 
 export async function deleteLegalCase(id: number, householdId: number) {
   await getDb().delete(legalCases).where(and(eq(legalCases.id, id), inArray(legalCases.userId, memberIds(householdId))));
+}
+
+// ============ ALERTS ============
+
+export async function getAlerts(householdId: number, limit = 100) {
+  return getDb().select().from(alerts)
+    .where(eq(alerts.householdId, householdId))
+    .orderBy(desc(alerts.createdAt))
+    .limit(limit);
+}
+
+export async function countUnreadAlerts(householdId: number): Promise<number> {
+  const rows = await getDb().select({ id: alerts.id }).from(alerts)
+    .where(and(eq(alerts.householdId, householdId), sql`${alerts.readAt} IS NULL`));
+  return rows.length;
+}
+
+export async function createAlert(data: InsertAlert) {
+  await getDb().insert(alerts).values(data);
+}
+
+export async function markAlertRead(id: number, householdId: number) {
+  await getDb().update(alerts).set({ readAt: new Date() }).where(and(eq(alerts.id, id), eq(alerts.householdId, householdId)));
+}
+
+export async function markAllAlertsRead(householdId: number) {
+  await getDb().update(alerts).set({ readAt: new Date() }).where(and(eq(alerts.householdId, householdId), sql`${alerts.readAt} IS NULL`));
+}
+
+export async function deleteAlert(id: number, householdId: number) {
+  await getDb().delete(alerts).where(and(eq(alerts.id, id), eq(alerts.householdId, householdId)));
+}
+
+/** All household ids — used by the daily monitor job. */
+export async function getAllHouseholdIds(): Promise<number[]> {
+  const rows = await getDb().select({ id: households.id }).from(households);
+  return rows.map((r) => r.id);
+}
+
+/** Whether an unread alert of a given type already exists for a case (dedupe). */
+export async function hasRecentAlert(householdId: number, legalCaseId: number, type: string): Promise<boolean> {
+  const rows = await getDb().select({ id: alerts.id }).from(alerts)
+    .where(and(
+      eq(alerts.householdId, householdId),
+      eq(alerts.legalCaseId, legalCaseId),
+      eq(alerts.type, type),
+      sql`${alerts.readAt} IS NULL`,
+    )).limit(1);
+  return rows.length > 0;
 }
 
 // ============ INTEGRATIONS ============

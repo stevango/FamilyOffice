@@ -298,3 +298,35 @@ export async function explainLegalCase(opts: {
   const messages: ChatMessage[] = [{ role: "user", content: `Dados do processo:\n${opts.processo}` }];
   return callAi({ provider: opts.provider, apiKey: opts.apiKey, system, messages, maxTokens: 900 });
 }
+
+/** Classify a legal case (esfera/área/risco) via AI; returns only valid enums. */
+export async function classifyLegalCase(opts: {
+  provider: AiProvider;
+  apiKey: string;
+  processo: string;
+}): Promise<{ esfera?: string; area?: string; risco?: string }> {
+  const ESF = ["pessoal", "empresarial", "familiar", "outro"];
+  const ARE = ["civel", "trabalhista", "tributario", "criminal", "familia", "empresarial", "consumidor", "administrativo", "outro"];
+  const RIS = ["baixo", "medio", "alto", "critico"];
+  const system = "Você classifica processos judiciais. Responda APENAS com um JSON válido, sem texto extra.";
+  const prompt = [
+    "Classifique o processo abaixo. Responda em JSON com as chaves:",
+    `- "esfera": uma de ${JSON.stringify(ESF)}`,
+    `- "area": uma de ${JSON.stringify(ARE)}`,
+    `- "risco": uma de ${JSON.stringify(RIS)} (estime pelo tipo de ação e valor)`,
+    "Use somente esses valores. Se não tiver certeza, escolha o mais provável.",
+    "",
+    "Processo:",
+    opts.processo,
+  ].join("\n");
+  const out = await callAi({ provider: opts.provider, apiKey: opts.apiKey, system, messages: [{ role: "user", content: prompt }], maxTokens: 200 });
+  const match = out.match(/\{[\s\S]*\}/);
+  if (!match) return {};
+  try {
+    const j = JSON.parse(match[0]);
+    const pick = (v: unknown, allowed: string[]) => (typeof v === "string" && allowed.includes(v) ? v : undefined);
+    return { esfera: pick(j.esfera, ESF), area: pick(j.area, ARE), risco: pick(j.risco, RIS) };
+  } catch {
+    return {};
+  }
+}

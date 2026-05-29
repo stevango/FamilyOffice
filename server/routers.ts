@@ -22,7 +22,8 @@ import {
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router, writeProcedure } from "./_core/trpc";
 import * as db from "./db";
-import { aiClassifyAndExtract, aiExtractFields, chatAssistant, explainLegalCase, summarizeDocument, verifyAiKey, type AiProvider } from "./ai";
+import { aiClassifyAndExtract, aiExtractFields, chatAssistant, classifyLegalCase, explainLegalCase, summarizeDocument, verifyAiKey, type AiProvider } from "./ai";
+import { checkHouseholdUpdates } from "./legalMonitor";
 import { lookupCep } from "./cep";
 import { lookupCnpj } from "./cnpj";
 import { decryptSecret, encryptSecret, secretHint } from "./crypto";
@@ -1292,6 +1293,43 @@ export const appRouter = router({
         throw new TRPCError({ code: pending ? "NOT_IMPLEMENTED" : "BAD_REQUEST", message: err instanceof Error ? err.message : "Falha na busca." });
       }
     }),
+    /** Classify a case (esfera/área/risco) via AI. */
+    classify: writeProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+      const cases = await db.getLegalCases(ctx.user.householdId);
+      const c = cases.find((x) => x.id === input.id);
+      if (!c) throw new TRPCError({ code: "NOT_FOUND", message: "Processo não encontrado." });
+      const ai = await resolveAi(ctx.user.householdId);
+      if (!ai) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Configure um Consultor IA (Claude ou OpenAI) em Integrações." });
+      const processo = [
+        c.title && `Título: ${c.title}`,
+        c.classe && `Classe: ${c.classe}`,
+        c.assunto && `Assunto: ${c.assunto}`,
+        (c.vara || c.court) && `Órgão/Vara: ${c.vara || c.court}`,
+        c.valorCausa && `Valor da causa: R$ ${c.valorCausa}`,
+        c.vinculo && `Vínculo: ${c.vinculo}`,
+        c.ultimoAndamento && `Último andamento: ${c.ultimoAndamento}`,
+        c.description && `Descrição: ${c.description}`,
+      ].filter(Boolean).join("\n");
+      try {
+        const r = await classifyLegalCase({ provider: ai.provider, apiKey: ai.apiKey, processo });
+        const patch: Record<string, unknown> = {};
+        if (r.esfera && !c.esfera) patch.esfera = r.esfera;
+        if (r.area && !c.area) patch.area = r.area;
+        if (r.risco && !c.risco) patch.risco = r.risco;
+        if (Object.keys(patch).length) await db.updateLegalCase(c.id, ctx.user.householdId, patch as any);
+        return { success: true, ...r };
+      } catch (err) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: err instanceof Error ? err.message : "Falha na classificação por IA." });
+      }
+    }),
+    /** Run the monitor now for this household (same routine as the 07:00 job). */
+    checkUpdates: writeProcedure.mutation(async ({ ctx }) => {
+      try {
+        return await checkHouseholdUpdates(ctx.user.householdId);
+      } catch (err) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: err instanceof Error ? err.message : "Falha ao verificar atualizações." });
+      }
+    }),
     /** Attach/detach Cofre Digital documents to a legal case. */
     attachDocuments: writeProcedure.input(z.object({ id: z.number(), documentIds: z.array(z.number()) })).mutation(async ({ ctx, input }) => {
       await db.updateLegalCase(input.id, ctx.user.householdId, {
@@ -1301,6 +1339,24 @@ export const appRouter = router({
     }),
     delete: writeProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
       await db.deleteLegalCase(input.id, ctx.user.householdId);
+      return { success: true };
+    }),
+  }),
+
+  // ============ ALERTS ============
+  alerts: router({
+    list: protectedProcedure.query(async ({ ctx }) => db.getAlerts(ctx.user.householdId)),
+    unreadCount: protectedProcedure.query(async ({ ctx }) => ({ count: await db.countUnreadAlerts(ctx.user.householdId) })),
+    markRead: writeProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+      await db.markAlertRead(input.id, ctx.user.householdId);
+      return { success: true };
+    }),
+    markAllRead: writeProcedure.mutation(async ({ ctx }) => {
+      await db.markAllAlertsRead(ctx.user.householdId);
+      return { success: true };
+    }),
+    delete: writeProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+      await db.deleteAlert(input.id, ctx.user.householdId);
       return { success: true };
     }),
   }),

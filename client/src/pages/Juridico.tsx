@@ -45,6 +45,7 @@ import {
   History,
   FileText,
   Paperclip,
+  Sparkles,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
@@ -158,6 +159,16 @@ export default function Juridico() {
     onError: (e) => { toast.error(e.message ?? "Falha na explicação por IA"); setExplainFor(null); },
   });
   const explain = (c: any) => { setExplainFor({ title: c.title }); setExplanation(""); explainMutation.mutate({ id: c.id }); };
+
+  const classifyMutation = trpc.legalCases.classify.useMutation({
+    onSuccess: (r: any) => {
+      invalidate();
+      setForm((prev) => ({ ...prev, esfera: prev.esfera || r.esfera || "", area: prev.area || r.area || "", risco: prev.risco || r.risco || "" }));
+      const got = [r.esfera, r.area, r.risco].filter(Boolean);
+      toast.success(got.length ? `IA sugeriu: ${got.join(", ")}` : "IA não conseguiu classificar");
+    },
+    onError: (e) => toast.error(e.message ?? "Falha ao classificar"),
+  });
 
   const [docsForId, setDocsForId] = useState<number | null>(null);
   const [docsForTitle, setDocsForTitle] = useState("");
@@ -648,6 +659,12 @@ export default function Juridico() {
               <Label>Título do processo</Label>
               <Input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Ex: Ação Trabalhista - Empresa X" />
             </div>
+            {editingId != null && (
+              <Button type="button" variant="outline" size="sm" className="gap-2" disabled={classifyMutation.isPending} onClick={() => classifyMutation.mutate({ id: editingId })}>
+                {classifyMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 text-primary" />}
+                Classificar com IA (esfera, área, risco)
+              </Button>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Número CNJ</Label>

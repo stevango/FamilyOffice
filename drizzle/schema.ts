@@ -357,3 +357,21 @@ export const companyPartners = mysqlTable("company_partners", {
 
 export type CompanyPartner = typeof companyPartners.$inferSelect;
 export type InsertCompanyPartner = typeof companyPartners.$inferInsert;
+
+/**
+ * Alerts surfaced to the household (e.g. a new legal-process movement found by
+ * the daily monitor, or an upcoming deadline).
+ */
+export const alerts = mysqlTable("alerts", {
+  id: int("id").autoincrement().primaryKey(),
+  householdId: int("householdId").notNull(),
+  legalCaseId: int("legalCaseId"),
+  type: varchar("type", { length: 50 }).notNull(),
+  title: varchar("title", { length: 500 }).notNull(),
+  message: text("message"),
+  readAt: timestamp("readAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => [index("alerts_householdId_idx").on(t.householdId)]);
+
+export type Alert = typeof alerts.$inferSelect;
+export type InsertAlert = typeof alerts.$inferInsert;

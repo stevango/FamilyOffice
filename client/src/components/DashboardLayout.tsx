@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { trpc } from "@/lib/trpc";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -36,6 +37,7 @@ import {
   Users,
   Calculator,
   Network,
+  Bell,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -49,6 +51,7 @@ const menuItems = [
   { icon: Building2, label: "Patrimônio", path: "/patrimonio" },
   { icon: Network, label: "Empresas", path: "/empresas" },
   { icon: Scale, label: "Jurídico", path: "/juridico" },
+  { icon: Bell, label: "Alertas", path: "/alertas" },
   { icon: Bot, label: "Assistente", path: "/assistente" },
   { icon: Users, label: "Família", path: "/familia" },
   { icon: Plug, label: "Integrações", path: "/integracoes", adminOnly: true },
